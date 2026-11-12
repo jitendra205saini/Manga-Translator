@@ -63,38 +63,43 @@ uses the correct gender: a girl says *"मैं थक गई"*, a boy says *"�
 ## How it works
 
 ```mermaid
-flowchart TD
-    A[Manga page<br/>Firefox / Chrome] -->|image comes into view<br/>or is about to| B[Extension<br/>content.js, 3 pages in parallel]
-    B -->|image + page URL| C[background.js]
-    C -->|canvas / fetch with Referer / screenshot| D[Local server<br/>FastAPI :7860]
+flowchart LR
+    subgraph B[Browser extension]
+        direction TB
+        B1[Manga page<br/>Firefox / Chrome] --> B2[content.js<br/>finds pages, 3 at a time]
+        B2 --> B3[background.js<br/>fetches the image]
+    end
 
-    D --> E{Memory or disk cache?}
-    E -->|hit| R[Return translated image]
-    E -->|miss| F[Windows OCR<br/>text lines + language]
+    subgraph S[Local server :7860]
+        direction TB
+        S1{Cached?} -->|no| S2[Windows OCR<br/>text + language]
+        S2 --> S3[ML detector<br/>bubbles + text boxes]
+        S3 --> S4[Batcher<br/>up to 3 pages]
+    end
 
-    F --> G[ML detector<br/>comic-text-and-bubble-detector ONNX]
-    G --> G1[bubble / text_bubble / text_free boxes]
-    G1 --> H[Assign OCR lines to text boxes<br/>reading order]
+    subgraph A[AI translation]
+        direction TB
+        A1[Gemini Flash-Lite<br/>images + numbered boxes] -.->|limit / error| A2[Groq]
+        A2 -.->|fails| A3[Local NLLB]
+    end
 
-    H --> I[Batcher<br/>waits 1.5 s, groups up to 3 pages]
-    I --> L[Red box + number on each text box]
-    L --> M{AI translation}
-    M -->|1| M1[Gemini Flash-Lite<br/>page images + bubbles + character memory]
-    M -->|limit / error| M2[Groq gpt-oss]
-    M -->|both fail| M3[Local NLLB]
-    M1 --> N
-    M2 --> N
-    M3 --> N
+    subgraph R[Typesetting]
+        direction TB
+        R1{Text in a bubble?} -->|yes| R2[Erase text pixels]
+        R1 -->|no| R3[LaMa inpainting]
+        R2 --> R4[Fit Hindi to the bubble<br/>Baloo 2 + raqm]
+        R3 --> R4
+    end
 
-    N[Casual Hindi<br/>matched to speaker gender] --> O{Text inside a bubble?}
-    O -->|yes| O1[Erase text pixels,<br/>fit Hindi to the bubble oval]
-    O -->|no, on artwork| O2[LaMa inpainting<br/>rebuild the background]
-    O1 --> P[Draw Hindi<br/>Baloo 2 + raqm]
-    O2 --> P
-    P --> Q[(memory.json + cache/)]
-    P --> R
-    R --> S[Extension swaps the img src<br/>Alt+O shows the original]
+    B3 --> S1
+    S4 --> A1
+    A1 --> R1
+    R4 -->|translated image| B1
+    S1 -->|yes| B1
 ```
+
+Each translated page is cached on disk, and character genders are remembered per series in `memory.json`.
+Press **Alt+O** to switch between the original and the Hindi page.
 
 ## Tech stack
 

@@ -63,38 +63,43 @@ isliye Hindi mein gender sahi aata hai: ladki bole to *"मैं थक गई"
 ## Kaise kaam karta hai
 
 ```mermaid
-flowchart TD
-    A[Manga page<br/>Firefox / Chrome] -->|image screen par aayi<br/>ya aane wali hai| B[Extension<br/>content.js, 3 pages ek saath]
-    B -->|image + page URL| C[background.js]
-    C -->|canvas / Referer ke saath fetch / screenshot| D[Local server<br/>FastAPI :7860]
+flowchart LR
+    subgraph B[Browser extension]
+        direction TB
+        B1[Manga page<br/>Firefox / Chrome] --> B2[content.js<br/>pages dhoondhe, 3 ek saath]
+        B2 --> B3[background.js<br/>image laaye]
+    end
 
-    D --> E{Memory ya disk cache mein?}
-    E -->|haan| R[Translated image wapas]
-    E -->|nahi| F[Windows OCR<br/>text lines + language]
+    subgraph S[Local server :7860]
+        direction TB
+        S1{Cache mein?} -->|nahi| S2[Windows OCR<br/>text + language]
+        S2 --> S3[ML detector<br/>bubbles + text boxes]
+        S3 --> S4[Batcher<br/>3 pages tak]
+    end
 
-    F --> G[ML detector<br/>comic-text-and-bubble-detector ONNX]
-    G --> G1[bubble / text_bubble / text_free boxes]
-    G1 --> H[OCR lines ko text boxes mein baanto<br/>padhne ka order]
+    subgraph A[AI translation]
+        direction TB
+        A1[Gemini Flash-Lite<br/>images + numbered boxes] -.->|limit / error| A2[Groq]
+        A2 -.->|fail| A3[Local NLLB]
+    end
 
-    H --> I[Batcher<br/>1.5 s rukta hai, 3 pages tak jodta hai]
-    I --> L[Har text box par laal box + number]
-    L --> M{AI translation}
-    M -->|1| M1[Gemini Flash-Lite<br/>page images + bubbles + character memory]
-    M -->|limit / error| M2[Groq gpt-oss]
-    M -->|dono fail| M3[Local NLLB]
-    M1 --> N
-    M2 --> N
-    M3 --> N
+    subgraph R[Hindi likhna]
+        direction TB
+        R1{Text bubble mein?} -->|haan| R2[Text pixels mitao]
+        R1 -->|nahi| R3[LaMa inpainting]
+        R2 --> R4[Hindi bubble mein fit<br/>Baloo 2 + raqm]
+        R3 --> R4
+    end
 
-    N[Casual Hindi<br/>gender ke hisaab se] --> O{Text bubble ke andar?}
-    O -->|haan| O1[Text pixels mitao,<br/>Hindi bubble ke oval mein fit]
-    O -->|nahi, art ke upar| O2[LaMa inpainting<br/>background wapas banao]
-    O1 --> P[Hindi likho<br/>Baloo 2 + raqm]
-    O2 --> P
-    P --> Q[(memory.json + cache/)]
-    P --> R
-    R --> S[Extension img src badal deta hai<br/>Alt+O se original]
+    B3 --> S1
+    S4 --> A1
+    A1 --> R1
+    R4 -->|translated image| B1
+    S1 -->|haan| B1
 ```
+
+Har translated page disk par cache hota hai, aur characters ka gender har series ke liye `memory.json` mein yaad rehta hai.
+Original aur Hindi page ke beech badalne ke liye **Alt+O** dabao.
 
 ## Tech stack
 
