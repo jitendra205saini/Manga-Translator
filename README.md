@@ -138,7 +138,9 @@ manga-translator/
 │   ├── config.example.json    # copy to config.json and add your keys
 │   └── fonts/
 ├── SETUP.bat                  # one-time setup
-├── START_SERVER.bat           # start the local server
+├── START.bat                  # one-click start
+├── STOP.bat                   # stop the server
+├── START_SERVER.bat           # start the local server (console window)
 └── INSTALL_OCR_LANGUAGES.bat  # install Windows OCR language packs
 ```
 
@@ -190,10 +192,9 @@ SETUP.bat
 
 ## Usage
 
-1. Start the server:
-   ```bat
-   START_SERVER.bat
-   ```
+1. Double-click `START.bat` (or the **Manga Translator** desktop shortcut it creates on first run).
+   It runs setup if needed, asks for an API key if none is set, and starts the server in the background.
+   Run `STOP.bat` to stop it.
 2. Open a manga chapter in your browser.
 3. Click the extension icon and switch it **ON**, or press **Alt+T**.
 4. Scroll normally. Pages get an orange outline while they are being translated, then the Hindi version replaces them.
@@ -224,7 +225,7 @@ SETUP.bat
 
 | Problem | Fix |
 |---|---|
-| Popup says the server is down | Run `START_SERVER.bat` and keep its window open |
+| Popup says the server is down | Double-click `START.bat` |
 | Hindi matras look broken | Run `SETUP.bat` again, then `check_setup.py` should show `Hindi shaping: OK (raqm)` |
 | Pages stay in English | Check the server window for errors. Gemini's free daily limit may be used up; Groq is used next |
 | Wrong gender for a character | Edit that character in `server/memory.json` (`"m"` or `"f"`) |

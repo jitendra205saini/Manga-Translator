@@ -138,7 +138,9 @@ manga-translator/
 │   ├── config.example.json    # ise config.json naam se copy karke keys daalo
 │   └── fonts/
 ├── SETUP.bat                  # ek baar ka setup
-├── START_SERVER.bat           # local server chalao
+├── START.bat                  # one-click start
+├── STOP.bat                   # stop the server
+├── START_SERVER.bat           # local server chalao (console window ke saath)
 └── INSTALL_OCR_LANGUAGES.bat  # Windows OCR language packs install
 ```
 
@@ -189,10 +191,9 @@ SETUP.bat
 
 ## Use kaise karein
 
-1. Server chalao:
-   ```bat
-   START_SERVER.bat
-   ```
+1. `START.bat` pe double-click karo (ya pehli baar ke baad desktop pe bana **Manga Translator** shortcut).
+   Zarurat ho to ye setup khud karega, key na ho to maangega, aur server background mein chala dega.
+   Band karna ho to `STOP.bat`.
 2. Browser mein manga chapter kholo.
 3. Extension icon dabao aur **ON** karo, ya **Alt+T** dabao.
 4. Normal scroll karo. Translate hote waqt page par narangi border dikhega, phir Hindi wala page lag jaayega.
@@ -223,7 +224,7 @@ SETUP.bat
 
 | Dikkat | Hal |
 |---|---|
-| Popup mein server band dikhe | `START_SERVER.bat` chalao aur uski window khuli rakho |
+| Popup mein server band dikhe | `START.bat` pe double-click karo |
 | Hindi ki matras tooti dikhein | `SETUP.bat` dobara chalao, phir `check_setup.py` mein `Hindi shaping: OK (raqm)` aana chahiye |
 | Pages English mein reh jaayein | Server window mein error dekho. Gemini ki free limit khatam ho sakti hai, tab Groq chalega |
 | Kisi character ka gender galat | `server/memory.json` mein us character ko `"m"` ya `"f"` kar do |
