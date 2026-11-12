@@ -1,6 +1,6 @@
 <div align="center">
 
-# 📖 Manga Translator
+# Manga Translator
 
 **Read manga, manhwa and comics in natural, casual Hindi, right in your browser.**
 
@@ -13,13 +13,13 @@ Japanese · Korean · Chinese · English → हिन्दी
 ![chrome](https://img.shields.io/badge/Chrome-supported-4285F4?logo=googlechrome&logoColor=white)
 ![ai](https://img.shields.io/badge/AI-Gemini%20%7C%20Groq%20%7C%20NLLB-8E75B2)
 
-[Features](#-features) · [How it works](#-how-it-works) · [Installation](#-installation) · [Usage](#-usage) · [Configuration](#%EF%B8%8F-configuration) · [Troubleshooting](#-troubleshooting)
+[Features](#features) · [How it works](#how-it-works) · [Installation](#installation) · [Usage](#usage) · [Configuration](#configuration) · [Troubleshooting](#troubleshooting)
 
 </div>
 
 ---
 
-## 🧭 Overview
+## Overview
 
 **Manga Translator** is a free, self-hosted tool that translates manga pages while you read them.
 A browser extension sends each page to a small server running on your own PC. The server reads the text,
@@ -29,21 +29,21 @@ into the speech bubbles, so the page looks as if it had been published in Hindi.
 Unlike word-for-word translators, it looks at the page image to work out **who is speaking**, so the Hindi
 uses the correct gender: a girl says *"मैं थक गई"*, a boy says *"मैं थक गया"*.
 
-## ✨ Features
+## Features
 
-| | Feature | Details |
-|---|---|---|
-| 🗣️ | **Casual Hindi** | Natural spoken Hindi like anime dubs, not formal or bookish Hindi |
-| ⚧️ | **Gender-aware** | Verbs match the speaker and the person being addressed |
-| 🧠 | **Character memory** | Remembers each character's gender per series (`memory.json`) |
-| 🌐 | **4 source languages** | Japanese, Korean, Chinese (Simplified / Traditional) and English, with auto-detect |
-| 💬 | **Bubble-aware typesetting** | Detects speech bubbles, erases the original text and fits Hindi to the bubble shape |
-| 🔁 | **Fallback chain** | Gemini → Groq → local NLLB, so reading never stops when a free limit runs out |
-| 🦊 | **Firefox & Chrome** | Manifest V3 extension that works on any site, with an "always on for this site" option |
-| ⚡ | **Fast reading** | Prefetches upcoming pages, translates 3 pages in parallel and caches results |
-| 🔒 | **Local first** | Runs on `127.0.0.1`. API keys stay on your PC and are never committed |
+| Feature | Details |
+|---|---|
+| **Casual Hindi** | Natural spoken Hindi like anime dubs, not formal or bookish Hindi |
+| **Gender-aware** | Verbs match the speaker and the person being addressed |
+| **Character memory** | Remembers each character's gender per series (`memory.json`) |
+| **4 source languages** | Japanese, Korean, Chinese (Simplified / Traditional) and English, with auto-detect |
+| **Bubble-aware typesetting** | Detects speech bubbles, erases the original text and fits Hindi to the bubble shape |
+| **Fallback chain** | Gemini → Groq → local NLLB, so reading never stops when a free limit runs out |
+| **Firefox & Chrome** | Manifest V3 extension that works on any site, with an "always on for this site" option |
+| **Fast reading** | Prefetches upcoming pages, translates 3 pages in parallel and caches results |
+| **Local first** | Runs on `127.0.0.1`. API keys stay on your PC and are never committed |
 
-## 🔍 How it works
+## How it works
 
 ```mermaid
 flowchart TD
@@ -81,7 +81,7 @@ flowchart TD
     R --> S[Extension swaps the img src]
 ```
 
-## 🛠️ Tech stack
+## Tech stack
 
 | Layer | Technology |
 |---|---|
@@ -92,7 +92,7 @@ flowchart TD
 | Translation | Google Gemini Flash-Lite, Groq (`openai/gpt-oss-120b`), Meta NLLB-200 600M (offline) |
 | Rendering | Pillow + libraqm / FriBiDi, Noto Sans Devanagari |
 
-## 📁 Project structure
+## Project structure
 
 ```
 manga-translator/
@@ -115,7 +115,7 @@ manga-translator/
 └── INSTALL_OCR_LANGUAGES.bat  # install Windows OCR language packs
 ```
 
-## 📦 Installation
+## Installation
 
 ### Requirements
 
@@ -160,7 +160,7 @@ SETUP.bat
 > [!NOTE]
 > Firefox removes temporary add-ons when it closes. Load it again after each restart, or sign the add-on through Mozilla to install it permanently.
 
-## 🚀 Usage
+## Usage
 
 1. Start the server:
    ```bat
@@ -175,7 +175,7 @@ SETUP.bat
 - Tick **"Is site par hamesha ON"** to turn the translator on automatically for that site.
 - Pick a fixed language instead of **Auto** to make pages translate faster.
 
-## ⚙️ Configuration
+## Configuration
 
 `server/config.json`
 
@@ -189,7 +189,7 @@ SETUP.bat
 | `groq.vision` | `false` | Send the page image to Groq (needs a vision model) |
 | `image_max_side` | `1024` | Size of the image sent to the AI. Smaller uses fewer tokens |
 
-## 🩺 Troubleshooting
+## Troubleshooting
 
 | Problem | Fix |
 |---|---|
@@ -209,14 +209,14 @@ cd server
 For debugging, the server log shows the detected language, the provider used and each bubble's
 gender (`m` / `f` / `u`). The original and translated versions of the last 40 pages are saved in `server/debug/`.
 
-## ⚠️ Known limitations
+## Known limitations
 
 - Windows OCR struggles with very stylized, italic or vertical text. Gemini reads those bubbles from the image instead.
 - Bubbles on dark backgrounds, or bubbles joined to other bubbles, are not always detected.
 - Text drawn directly on artwork (outside bubbles) is covered with a plain patch instead of being inpainted.
 - Gemini's free tier has a daily request limit, which is set per project in Google AI Studio.
 
-## 🗺️ Roadmap
+## Roadmap
 
 - [ ] ML bubble and text detector (`comic-text-and-bubble-detector`)
 - [ ] Better OCR: `manga-ocr` for Japanese, PaddleOCR for English / Korean / Chinese
@@ -224,7 +224,7 @@ gender (`m` / `f` / `u`). The original and translated versions of the last 40 pa
 - [ ] Several pages per AI request to stretch the free limit
 - [ ] Comic-style Devanagari fonts
 
-## 🙏 Acknowledgements
+## Acknowledgements
 
 - [Google Gemini](https://ai.google.dev/), [Groq](https://groq.com/) and [Meta NLLB-200](https://huggingface.co/facebook/nllb-200-distilled-600M) for translation
 - [Noto Sans Devanagari](https://fonts.google.com/noto/specimen/Noto+Sans+Devanagari) for the Hindi font
