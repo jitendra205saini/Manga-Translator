@@ -10,78 +10,92 @@
 
 ## Description
 
-**Manga Translator** ek free, local tool hai jo browser mein manga, manhwa aur comics padhte waqt pages ko
-apne aap **casual (bolchaal wali) Hindi** mein translate karke usi image par likh deta hai, jaise page pehle se Hindi mein ho.
+**Manga Translator** is a free, locally hosted tool that translates manga, manhwa and comic pages into
+**casual, everyday Hindi** while you read them in the browser. The Hindi is drawn directly onto the image,
+so the page looks as if it had been published in Hindi.
 
-- Japanese, Korean, Chinese aur English pages support
-- Bolne wale ke **gender ke hisaab se** Hindi ("main thak gayi" / "main thak gaya")
-- Shuddh Hindi nahi, roz ki bolchaal wali Hindi
-- Purana text mitakar Hindi bubble ke andar fit hoti hai
-- Firefox aur Chrome dono par, kisi bhi site par
+- Supports Japanese, Korean, Chinese and English pages
+- **Gender-aware** Hindi: verbs match the speaker ("मैं थक गई" for a girl, "मैं थक गया" for a boy)
+- Natural spoken Hindi instead of formal, bookish Hindi
+- Erases the original text and fits the Hindi inside the speech bubble
+- Works in Firefox and Chrome, on any site
 
-Translation Gemini se hoti hai (image dekhkar, bolne wale ke gender ke hisaab se). Gemini na chale to Groq,
-aur dono na chalein to local NLLB (offline backup).
+Translation is done by Gemini, which looks at the page image to work out who is speaking.
+If Gemini is unavailable it falls back to Groq, and if both fail it uses a local NLLB model offline.
 
 **Topics / Tags:** `manga` `manga-translator` `manhwa` `comics` `translation` `hindi` `ocr` `gemini` `groq` `llm`
 `browser-extension` `firefox-extension` `chrome-extension` `fastapi` `python` `opencv`
 
-## Kaise kaam karta hai
+## How it works
 
 ```mermaid
 flowchart TD
-    A[Manga page<br/>Firefox / Chrome] -->|image dikhi| B[Extension<br/>content.js]
+    A[Manga page<br/>Firefox / Chrome] -->|image comes into view| B[Extension<br/>content.js]
     B -->|image + page URL| C[background.js]
     C -->|canvas / fetch with Referer / screenshot| D[Local server<br/>FastAPI :7860]
 
-    D --> E{Cache mein hai?}
-    E -->|haan| R[Translated image wapas]
-    E -->|nahi| F[Windows OCR<br/>text + boxes]
+    D --> E{In cache?}
+    E -->|yes| R[Return translated image]
+    E -->|no| F[Windows OCR<br/>text + boxes]
 
     F --> G{Language}
-    G -->|Auto| G1[Japanese / Korean / Chinese / English detect]
+    G -->|Auto| G1[Detect Japanese / Korean / Chinese / English]
     G -->|fixed| H
-    G1 --> H[Lines ko group karo]
+    G1 --> H[Group lines]
 
-    H --> I[Bubble detection<br/>OpenCV: safed band area + kaali outline]
-    I --> J{OCR ko text mila?}
-    J -->|nahi| K[Gemini khud text dhoondhe<br/>gemini-detect]
-    J -->|haan| L[Page image par laal box + number]
+    H --> I[Bubble detection<br/>OpenCV: closed white area + dark outline]
+    I --> J{Did OCR find text?}
+    J -->|no| K[Gemini finds the text itself<br/>gemini-detect]
+    J -->|yes| L[Red box + number on each bubble]
 
     L --> M{AI translation}
     M -->|1| M1[Gemini Flash-Lite<br/>image + bubbles + character memory]
-    M -->|limit / fail| M2[Groq gpt-oss]
-    M -->|dono fail| M3[NLLB local]
+    M -->|limit / error| M2[Groq gpt-oss]
+    M -->|both fail| M3[Local NLLB]
     M1 --> N
     M2 --> N
     M3 --> N
     K --> N
 
-    N[Casual Hindi<br/>gender ke hisaab se] --> O[Purana text mitao<br/>bubble mask / convex hull]
-    O --> P[Hindi bubble ki shape mein fit<br/>Noto Sans Devanagari + raqm]
-    P --> Q[(memory.json<br/>characters ka gender)]
+    N[Casual Hindi<br/>matched to speaker gender] --> O[Erase original text<br/>bubble mask / convex hull]
+    O --> P[Fit Hindi to the bubble shape<br/>Noto Sans Devanagari + raqm]
+    P --> Q[(memory.json<br/>character genders)]
     P --> R
-    R --> S[Extension img.src badal deta hai]
+    R --> S[Extension swaps the img src]
 ```
 
-## Ek baar
-1. `INSTALL_OCR_LANGUAGES.bat` (admin)
-2. `SETUP.bat`
-3. API keys lo (dono free) aur `server\config.example.json` ko copy karke `server\config.json` banao, usme keys daalo:
+## Requirements
+
+- Windows 11 (uses the built-in Windows OCR)
+- Python 3.13 with PyTorch already installed (an NVIDIA GPU is optional; it is used only for the NLLB fallback)
+- Firefox 128+ or Chrome
+- A free Gemini API key and/or a free Groq API key
+
+## One-time setup
+
+1. Run `INSTALL_OCR_LANGUAGES.bat` as administrator. This installs the Windows OCR language packs.
+2. Run `SETUP.bat`. This creates the virtual environment, installs the dependencies and downloads the font, the FriBiDi DLL used for correct Hindi shaping, and the NLLB model.
+3. Get your API keys (both are free):
    - Gemini: https://aistudio.google.com/apikey -> Create API key
-   - Groq:   https://console.groq.com/keys -> Create API Key
+   - Groq: https://console.groq.com/keys -> Create API Key
 
-   Key kisi ko mat dikhana. `config.json` git mein push nahi hoti.
-4. Extension load karo:
-   - **Chrome:** `chrome://extensions` -> Developer mode -> Load unpacked -> `extension` folder
-   - **Firefox:** `about:debugging#/runtime/this-firefox` -> Load Temporary Add-on -> `extension\manifest.json`,
-     phir popup mein "Pehle permission do" dabao
+   Copy `server\config.example.json` to `server\config.json` and paste your keys into it.
+   Never share your keys. `config.json` is listed in `.gitignore`, so it is never pushed.
+4. Load the extension:
+   - **Chrome:** `chrome://extensions` -> enable Developer mode -> Load unpacked -> select the `extension` folder
+   - **Firefox:** `about:debugging#/runtime/this-firefox` -> Load Temporary Add-on -> select `extension\manifest.json`,
+     then click "Pehle permission do" in the extension popup to grant site access
 
-## Har baar
-1. `START_SERVER.bat`
-2. Manga tab par extension icon -> ON (ya **Alt+T**)
-   - "Is site par hamesha ON" tick karo to us site par apne aap chalega
-   - Language Auto ki jagah fix karoge to page jaldi translate hoga
+## Every time
 
-Server log mein har page ki language, provider (gemini/groq/nllb), har bubble ka gender (m/f/u) aur translation dikhti hai.
-Characters ka gender `server\memory.json` mein yaad rehta hai (galat ho to wahan se badal sakte ho).
-Aakhri 40 pages ka original + translated `server\debug\` mein save hota hai.
+1. Run `START_SERVER.bat`.
+2. Open a manga chapter, click the extension icon and switch it ON (or press **Alt+T**).
+   - Tick "Is site par hamesha ON" to turn it on automatically for that site.
+   - Choosing a fixed language instead of Auto makes pages translate faster.
+
+## Debugging
+
+- The server log shows, for each page, the detected language, the provider used (gemini / groq / nllb),
+  the gender detected for each bubble (m / f / u) and the translation.
+- Character genders are remembered per series in `server\memory.json`. Edit it if one is wrong.
+- The original and translated versions of the last 40 pages are saved in `server\debug\`.
