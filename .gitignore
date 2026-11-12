@@ -1,0 +1,9 @@
+# secrets
+server/config.json
+# local data
+server/memory.json
+server/debug/
+server/bin/
+manga_env/
+__pycache__/
+*.pyc

@@ -1,0 +1,14 @@
+transformers>=4.51,<5
+sentencepiece
+protobuf
+pillow
+numpy
+fastapi
+uvicorn
+winrt-runtime
+winrt-Windows.Foundation
+winrt-Windows.Foundation.Collections
+winrt-Windows.Globalization
+winrt-Windows.Graphics.Imaging
+winrt-Windows.Media.Ocr
+winrt-Windows.Storage.Streams

@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { font: 13px system-ui, sans-serif; width: 260px; margin: 0; padding: 12px; color: #111; background: #fff; }
+  h1 { font-size: 14px; margin: 0 0 10px; }
+  .row { display: flex; align-items: center; justify-content: space-between; margin: 8px 0; }
+  button#toggle { width: 100%; padding: 9px; font-size: 14px; font-weight: 600; border: 0; border-radius: 6px; cursor: pointer; background: #e5e7eb; }
+  button#toggle.on { background: #16a34a; color: #fff; }
+  select { padding: 3px; }
+  .status { margin-top: 10px; padding: 8px; background: #f3f4f6; border-radius: 6px; font-size: 12px; line-height: 1.6; }
+  .ok { color: #15803d; } .bad { color: #b91c1c; } .muted { color: #6b7280; }
+</style>
+</head>
+<body>
+  <h1>Manga Translator → Hindi</h1>
+  <button id="perm" style="display:none;width:100%;padding:8px;margin-bottom:8px;background:#f59e0b;border:0;border-radius:6px;font-weight:600;cursor:pointer">Pehle permission do (sab sites)</button>
+  <button id="toggle">OFF</button>
+  <div class="row">
+    <label for="always">Is site par hamesha ON</label>
+    <input type="checkbox" id="always">
+  </div>
+  <div class="row">
+    <label for="lang">Language</label>
+    <select id="lang">
+      <option value="Auto">Auto</option>
+      <option value="ja">Japanese</option>
+      <option value="ko">Korean</option>
+      <option value="zh_hans">Chinese (Simplified)</option>
+      <option value="zh_hant">Chinese (Traditional)</option>
+      <option value="en">English</option>
+    </select>
+  </div>
+  <div class="status" id="status">Server check ho raha hai...</div>
+  <div class="muted" style="margin-top:8px">Shortcut: Alt+T</div>
+  <script src="popup.js"></script>
+</body>
+</html>
