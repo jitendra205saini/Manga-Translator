@@ -520,9 +520,10 @@ def erase_ml(img, groups):
                 mask = em
             plans.append(("mask", ebox, mask, bx0, by0, bg, g["thickness"] * 1.3))
         else:
-            m = inpaint.text_mask(arr, ebox, grow=4)
+            flat = _is_flat(arr, g["box"])
+            m = inpaint.text_mask(arr, ebox, grow=4) if flat else inpaint.letter_mask(arr, ebox)
             if m is not None:
-                if _is_flat(arr, g["box"]):
+                if flat:
                     arr[ebox[1]:ebox[3], ebox[0]:ebox[2]][m.astype(bool)] = bg
                 else:
                     full = np.zeros((H, W), np.uint8)

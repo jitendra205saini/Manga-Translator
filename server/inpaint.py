@@ -67,3 +67,23 @@ def text_mask(arr, box, grow=4):
     m = (diff > 60).astype(np.uint8)
     m = cv2.dilate(m, np.ones((3, 3), np.uint8), iterations=grow)
     return m
+
+
+def letter_mask(arr, box, grow=3):
+    """Art ke upar bade stylish letters: sirf letter jaise (chhote, alag) kaale/safed tukde, lambi art lines nahi."""
+    x0, y0, x1, y1 = box
+    region = arr[y0:y1, x0:x1]
+    if region.size == 0:
+        return None
+    gray = cv2.cvtColor(region, cv2.COLOR_RGB2GRAY)
+    h, w = gray.shape
+    out = np.zeros_like(gray, dtype=np.uint8)
+    for m in ((gray < 90).astype(np.uint8), (gray > 200).astype(np.uint8)):
+        n, labels, stats, _ = cv2.connectedComponentsWithStats(m, connectivity=8)
+        for i in range(1, n):
+            cx, cy, cw, ch, area = stats[i]
+            short = min(w, h)
+            if ch < 0.45 * h and cw < 0.45 * w and max(cw, ch) < 0.6 * short + 40 and area > 15                     and area > 0.2 * cw * ch:
+                out[labels == i] = 1
+    out = cv2.dilate(out, np.ones((3, 3), np.uint8), iterations=grow)
+    return out

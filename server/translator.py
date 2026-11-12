@@ -148,6 +148,12 @@ def _center_in(box, outer, pad=6):
     return outer[0] - pad <= cx <= outer[2] + pad and outer[1] - pad <= cy <= outer[3] + pad
 
 
+def _overlap_frac(a, b):
+    ix = max(0, min(a[2], b[2]) - max(a[0], b[0]))
+    iy = max(0, min(a[3], b[3]) - max(a[1], b[1]))
+    return ix * iy / max(1, min(_area(a), _area(b)))
+
+
 def _area(b):
     return max(1, (b[2] - b[0]) * (b[3] - b[1]))
 
@@ -156,10 +162,16 @@ def ml_groups(img, lines, lang):
     """ML detector se text regions; OCR lines unme baanto. Region ka OCR na mile to AI image se padhega."""
     dets = detector.detect(img)
     bubbles = [d["box"] for d in dets if d["label"] == "bubble"]
+    # ek hi text ke kai (overlapping) boxes: sirf sabse pakka rakho
+    keep = []
+    for d in sorted((d for d in dets if d["label"] != "bubble"), key=lambda d: -d["score"]):
+        b = d["box"]
+        if any(_overlap_frac(b, k["box"]) > 0.6 for k in keep):
+            continue
+        keep.append(d)
+    dets = keep
     groups = []
     for d in dets:
-        if d["label"] == "bubble":
-            continue
         box = d["box"]
         mine = [l for l in lines if _center_in(l["box"], box)]
         sep = "" if lang in CJK_LANGS else " "

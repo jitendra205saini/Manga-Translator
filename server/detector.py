@@ -31,7 +31,7 @@ def _session():
     return _sess
 
 
-def detect(img, threshold=0.4):
+def detect(img, threshold=0.3):
     """Return list of {"label", "box": (x0,y0,x1,y1), "score"} in original image pixels."""
     W, H = img.size
     x = np.asarray(img.convert("RGB").resize((SIZE, SIZE)), dtype=np.float32) / 255.0

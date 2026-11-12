@@ -144,6 +144,8 @@ Rules:
 - Keep it short so it fits in the bubble. Keep the emotion, jokes and tone (angry, shy, sarcastic).
 - Never use English/Latin letters in "hi" (write English words in Devanagari: "ओके", "थैंक्स").
 - Website names, watermarks, scan-group credits, page numbers: return "" for them.
+  But short exclamations, interjections and SFX inside the story (YIKES, ALSO!, UM..., OH.) MUST be translated, never "".
+- For shouting, do not repeat matras or letters; use "!!!" instead (e.g. "कल है!!!").
 - Fix obvious OCR mistakes using context. If a bubble/box has no real text (just art, noise, watermark), return "" for it.
 - Sound effects (SFX): give a short Hindi equivalent (e.g. "धड़ाम!", "हम्म...") or "" if meaningless.
 
@@ -180,6 +182,9 @@ def clean_hi(text):
     text = re.sub(r"\S*\.(com|net|org|io|co)\S*", "", text, flags=re.I)
     text = re.sub(r"[A-Za-z]+", "", text)
     text = re.sub(r"\s+", " ", text).strip()
+    # chillane wali dohrai: "हैईईईई", "हैयायायाया", "वोओओओ" -> ek baar
+    text = re.sub(r"([\u0900-\u097f]{1,3}?)\1{3,}", r"\1\1", text)
+    text = re.sub(r"([\u093e-\u094c\u0901\u0902])\1+", r"\1", text)
     return text if re.search(r"[ऀ-ॿ]", text) else ""
 
 
