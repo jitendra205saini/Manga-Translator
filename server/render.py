@@ -487,6 +487,41 @@ def _is_flat(arr, box):
     return border.std() < 18
 
 
+def _interior(arr, ebox, around=None):
+    """Text ke chaaron taraf ka band safed (ya bubble rang) hissa: mitana isi ke andar.
+    Return ebox jitna mask, ya None agar safed area na mile."""
+    H, W = arr.shape[:2]
+    x0, y0, x1, y1 = around or ebox
+    pad = 12
+    X0, Y0, X1, Y1 = max(0, x0 - pad), max(0, y0 - pad), min(W, x1 + pad), min(H, y1 + pad)
+    gray = cv2.cvtColor(arr[Y0:Y1, X0:X1], cv2.COLOR_RGB2GRAY)
+    bright = (gray > 170).astype(np.uint8)
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(bright, connectivity=4)
+    ex0, ey0, ex1, ey1 = ebox
+    inner = labels[ey0 - Y0:ey1 - Y0, ex0 - X0:ex1 - X0]
+    if inner.size == 0 or n < 2:
+        return None
+    counts = np.bincount(inner.ravel(), minlength=n)
+    counts[0] = 0
+    k = int(counts.argmax())
+    if counts[k] < 0.25 * inner.size:
+        return None
+    comp = (labels == k).astype(np.uint8)
+    cs, _ = cv2.findContours(comp, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    filled = np.zeros_like(comp)
+    cv2.drawContours(filled, [max(cs, key=cv2.contourArea)], -1, 1, -1)  # text ke chhed bhar do
+    filled = cv2.erode(filled, np.ones((3, 3), np.uint8), iterations=2)   # outline se door
+    return filled[ey0 - Y0:ey1 - Y0, ex0 - X0:ex1 - X0]
+
+
+def _erase(arr, ebox, m, bg, around=None):
+    """m (text mask) ko bubble ke andar tak seemit karke bg rang bharo."""
+    inside = _interior(arr, ebox, around)
+    if inside is not None:
+        m = m & inside
+    arr[ebox[1]:ebox[3], ebox[0]:ebox[2]][m.astype(bool)] = bg
+
+
 def erase_ml(img, groups):
     """Translation se pehle hi saare text mitao (AI ke jawab ke intezaar ke saath-saath chalta hai).
     Return (orig_arr, erased_arr, plans) - plans[i] = group i ke likhne ki jagah."""
@@ -508,7 +543,7 @@ def erase_ml(img, groups):
             # text pixels mitao (bubble outline bachi rahe: sirf text box ke andar)
             m = inpaint.text_mask(arr, ebox, grow=3)
             if m is not None:
-                arr[ebox[1]:ebox[3], ebox[0]:ebox[2]][m.astype(bool)] = bg
+                _erase(arr, ebox, m, bg, around=g["bbox"])
             # Hindi: bubble ke andar ka oval, jo bubble ke rang ka ho
             bub = arr[by0:by1, bx0:bx1]
             em = _ellipse_mask(bx1 - bx0, by1 - by0)
@@ -524,7 +559,7 @@ def erase_ml(img, groups):
             m = inpaint.text_mask(arr, ebox, grow=4) if flat else inpaint.letter_mask(arr, ebox)
             if m is not None:
                 if flat:
-                    arr[ebox[1]:ebox[3], ebox[0]:ebox[2]][m.astype(bool)] = bg
+                    _erase(arr, ebox, m, bg)
                 else:
                     full = np.zeros((H, W), np.uint8)
                     full[ebox[1]:ebox[3], ebox[0]:ebox[2]] = m
