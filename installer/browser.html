@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Add Manga Translator to your browser</title>
+<link rel="icon" href="../extension/icons/icon32.png">
+<style>
+  body { font-family: Segoe UI, sans-serif; background: #f6f3ee; color: #222; margin: 0; }
+  main { max-width: 680px; margin: 32px auto; background: #fff; padding: 28px 32px; border-radius: 12px; box-shadow: 0 2px 12px #0001; }
+  h1 { font-size: 22px; display: flex; gap: 10px; align-items: center; margin-top: 0; }
+  h1 img { width: 40px; }
+  h2 { font-size: 17px; margin-top: 28px; border-bottom: 1px solid #eee; padding-bottom: 6px; }
+  li { margin: 7px 0; line-height: 1.5; }
+  code { background: #f1ece4; padding: 2px 6px; border-radius: 4px; word-break: break-all; }
+  button { background: #e8711a; color: #fff; border: 0; padding: 4px 10px; border-radius: 6px; cursor: pointer; margin-left: 6px; }
+  .note { background: #fff6e8; border-left: 4px solid #e8711a; padding: 10px 14px; font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1><img src="../extension/icons/icon128.png" alt="">Add the extension to your browser</h1>
+  <p>The translator is installed. One last step: add the browser extension. Extension folder:</p>
+  <p><code id="path"></code><button id="copy">Copy</button></p>
+
+  <h2>Chrome / Edge / Brave</h2>
+  <ol>
+    <li>Open <code>chrome://extensions</code> (Edge: <code>edge://extensions</code>).</li>
+    <li>Turn on <b>Developer mode</b> (top right, Edge: left side).</li>
+    <li>Click <b>Load unpacked</b> and choose the folder above.</li>
+    <li>Pin the extension from the puzzle icon in the toolbar.</li>
+  </ol>
+
+  <h2>Firefox</h2>
+  <ol>
+    <li>Open <code>about:debugging#/runtime/this-firefox</code>.</li>
+    <li>Click <b>Load Temporary Add-on</b> and choose <code>manifest.json</code> inside the folder above.</li>
+    <li>Open the extension popup and click <b>Grant site access first</b>.</li>
+  </ol>
+  <p class="note">Firefox removes temporary add-ons when it closes. A signed version that stays installed will be available from the project's GitHub releases.</p>
+
+  <h2>Use it</h2>
+  <ol>
+    <li>Open any manga chapter.</li>
+    <li>Click the extension icon and switch it <b>ON</b>, or press <b>Alt+T</b>.</li>
+    <li>First time only: click <b>Add API key</b> in the popup and paste a free Gemini key.</li>
+  </ol>
+</main>
+<script>
+  const dir = decodeURIComponent(location.pathname).replace(/^\//, "").replace(/\//g, "\\").replace(/\\installer\\[^\\]+$/, "\\extension");
+  document.getElementById("path").textContent = dir;
+  document.getElementById("copy").onclick = () => navigator.clipboard.writeText(dir);
+</script>
+</body>
+</html>

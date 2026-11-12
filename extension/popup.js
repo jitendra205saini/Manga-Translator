@@ -59,8 +59,12 @@ const $ = (id) => document.getElementById(id);
     const r = await (await fetch("http://127.0.0.1:7860/health")).json();
     const lines = Object.entries(r.providers || {}).map(([p, s]) =>
       `<div>${p}: <span class="${s === "ready" ? "ok" : "bad"}">${s}</span></div>`);
-    $("status").innerHTML = `<div class="ok">Server running (${r.device})</div>` + lines.join("");
+    const p = r.providers || {};
+    const noKey = !(p.gemini === "ready" || p.groq === "ready" || String(p.gemini || "").startsWith("limit") || String(p.groq || "").startsWith("limit"));
+    $("status").innerHTML = `<div class="ok">Server running (${r.device})</div>` + lines.join("") +
+      `<div><a href="#" id="keys">${noKey ? "<b>Add API key (required)</b>" : "Change API keys"}</a></div>`;
+    $("keys").onclick = (e) => { e.preventDefault(); chrome.tabs.create({ url: "http://127.0.0.1:7860/setup" }); };
   } catch (e) {
-    $("status").innerHTML = `<span class="bad">Server is not running. Start START_SERVER.bat.</span>`;
+    $("status").innerHTML = `<span class="bad">Server is not running. Open 'Manga Translator' from the Start menu or desktop.</span>`;
   }
 })();

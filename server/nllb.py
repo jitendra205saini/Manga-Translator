@@ -1,8 +1,13 @@
 # NLLB-200 distilled 600M -> Hindi. GPU par fp16, warna CPU fp32.
 import time
 
-import torch
-from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+try:  # torch optional hai: installer wale setup mein nahi hota, tab sirf Gemini/Groq
+    import torch
+    from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+    AVAILABLE = True
+except Exception:
+    torch = None
+    AVAILABLE = False
 
 MODEL_NAME = "facebook/nllb-200-distilled-600M"
 TARGET_LANG = "hin_Deva"
@@ -14,8 +19,8 @@ NLLB_CODES = {
     "en": "eng_Latn",
 }
 
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-DTYPE = torch.float16 if DEVICE == "cuda" else torch.float32
+DEVICE = ("cuda" if torch.cuda.is_available() else "cpu") if AVAILABLE else "cpu"
+DTYPE = (torch.float16 if DEVICE == "cuda" else torch.float32) if AVAILABLE else None
 
 _tokenizer = None
 _model = None
@@ -23,6 +28,8 @@ _model = None
 
 def load_model():
     global _tokenizer, _model
+    if not AVAILABLE:
+        raise RuntimeError("NLLB ke liye torch install nahi hai")
     if _model is None:
         t = time.time()
         _tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)

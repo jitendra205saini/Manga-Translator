@@ -16,7 +16,7 @@ if not exist "manga_env\Scripts\python.exe" (
 set "VPY=%~dp0manga_env\Scripts\python.exe"
 
 "%VPY%" -m pip install --upgrade pip || goto :fail
-"%VPY%" -m pip install -r server\requirements.txt || goto :fail
+"%VPY%" -m pip install -r server\requirements.txt -r server\requirements-nllb.txt || goto :fail
 
 cd server
 echo.

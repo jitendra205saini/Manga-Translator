@@ -312,7 +312,8 @@ def provider_status():
     out = {}
     for p in cfg["providers"]:
         if p == "nllb":
-            out[p] = "ready"
+            import nllb
+            out[p] = "ready" if nllb.AVAILABLE else "not installed"
         elif not cfg.get(p, {}).get("api_key"):
             out[p] = "no key"
         elif _cooldown.get(p, 0) > time.time():

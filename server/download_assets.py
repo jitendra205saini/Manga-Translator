@@ -8,6 +8,8 @@ import tempfile
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+import sys  # noqa: E402
+sys.path.insert(0, HERE)  # embeddable Python script ka folder khud nahi jodta
 FONT_URL = ("https://github.com/notofonts/notofonts.github.io/raw/main/fonts/"
             "NotoSansDevanagari/hinted/ttf/NotoSansDevanagari-Regular.ttf")
 MODEL_NAME = "facebook/nllb-200-distilled-600M"
@@ -126,4 +128,6 @@ if __name__ == "__main__":
     get_font()
     get_comic_font()
     get_models()
-    get_model()
+    import sys
+    if "--no-nllb" not in sys.argv:
+        get_model()

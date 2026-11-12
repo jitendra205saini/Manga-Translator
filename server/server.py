@@ -7,7 +7,11 @@ import traceback
 import requests
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+import json
+import os
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -61,6 +65,51 @@ def download_image(url, referer):
 @app.get("/health")
 async def health():
     return {"ok": True, "device": nllb.DEVICE, "providers": llm.provider_status()}
+
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+SETUP_ORIGINS = {"http://127.0.0.1:7860", "http://localhost:7860"}
+
+
+def _mask(k):
+    return (k[:4] + "..." + k[-4:]) if k else ""
+
+
+@app.get("/setup")
+async def setup_page():
+    return FileResponse(os.path.join(HERE, "setup.html"))
+
+
+@app.get("/icon.png")
+async def icon():
+    return FileResponse(os.path.join(HERE, "..", "extension", "icons", "icon128.png"))
+
+
+@app.get("/config")
+async def get_config():
+    cfg = llm.load_config()
+    return {p: _mask(cfg.get(p, {}).get("api_key", "")) for p in ("gemini", "groq")}
+
+
+@app.post("/config")
+async def set_config(request: Request):
+    # sirf apne /setup page se: koi aur website keys na badal sake
+    if request.headers.get("origin") not in SETUP_ORIGINS:
+        raise HTTPException(403, "keys can only be changed from http://127.0.0.1:7860/setup")
+    body = await request.json()
+    path = llm.CONFIG_PATH
+    cfg = {}
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            cfg = json.load(f)
+    for p in ("gemini", "groq"):
+        key = str(body.get(p) or "").strip()
+        if key:
+            cfg.setdefault(p, {})["api_key"] = key
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, indent=2, ensure_ascii=False)
+    full = llm.load_config()
+    return {"ready": bool(full["gemini"]["api_key"] or full["groq"]["api_key"])}
 
 
 @app.post("/translate")

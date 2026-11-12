@@ -146,6 +146,19 @@ manga-translator/
 
 ## Installation
 
+### Windows installer (recommended)
+
+1. Download `MangaTranslator-Setup.exe` from the [Releases](https://github.com/jitendra205saini/Manga-Translator/releases) page and run it. No admin rights are needed.
+2. The installer downloads its own Python and the AI models (about 600 MB) into `%LOCALAPPDATA%\Programs\Manga Translator`. Nothing is installed system-wide.
+3. At the end, a page shows how to add the extension to Chrome, Edge or Firefox.
+4. The first time you start **Manga Translator**, a page opens where you paste a free Gemini (and optionally Groq) API key. You can change keys later from the extension popup.
+
+To uninstall, use *Settings > Apps > Manga Translator > Uninstall*. The server is stopped and the whole install folder (Python, models, cache, keys) is removed; no pip or model cache is left elsewhere. Remove the browser extension from the browser itself.
+
+To build the installer yourself, install [Inno Setup 6](https://jrsoftware.org/isinfo.php) and run `installeruild.bat`.
+
+### Manual setup (developers)
+
 ### Requirements
 
 - Windows 11, for the built-in OCR
