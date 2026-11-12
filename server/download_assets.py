@@ -74,6 +74,41 @@ def get_fribidi():
         print(f"[fribidi] fail ({e}). Hindi matras galat dikh sakti hain.")
 
 
+HF_FILES = [
+    # (repo, file, local folder) - sab Apache-2.0
+    ("ogkalu/comic-text-and-bubble-detector", "detector.onnx", "comic-text-and-bubble-detector"),
+    ("Carve/LaMa-ONNX", "lama_fp32.onnx", "LaMa-ONNX"),
+]
+BALOO_URL = "https://github.com/google/fonts/raw/main/ofl/baloo2/Baloo2%5Bwght%5D.ttf"
+
+
+def get_models():
+    # ML bubble/text detector (~170 MB) aur LaMa inpainting (~210 MB)
+    from huggingface_hub import hf_hub_download
+    for repo, name, folder in HF_FILES:
+        dst = os.path.join(HERE, "models", folder, name)
+        if os.path.exists(dst):
+            print(f"[models] {name} already hai")
+            continue
+        try:
+            print(f"[models] {repo}/{name} download ho raha hai...")
+            hf_hub_download(repo, name, local_dir=os.path.join(HERE, "models", folder), token=False)
+        except Exception as e:
+            print(f"[models] {name} fail ({e}). Purana OpenCV tarika chalega.")
+
+
+def get_comic_font():
+    dst = os.path.join(HERE, "fonts", "Baloo2.ttf")
+    if os.path.exists(dst):
+        print("[font] Baloo 2 already hai")
+        return
+    try:
+        urllib.request.urlretrieve(BALOO_URL, dst)
+        print("[font] Baloo 2 (comic style Hindi) download ho gaya")
+    except Exception as e:
+        print(f"[font] Baloo 2 fail ({e}). Noto Sans Devanagari chalega.")
+
+
 def make_config():
     dst = os.path.join(HERE, "config.json")
     if os.path.exists(dst):
@@ -89,4 +124,6 @@ if __name__ == "__main__":
     get_fribidi()
     make_config()
     get_font()
+    get_comic_font()
+    get_models()
     get_model()

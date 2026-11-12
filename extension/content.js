@@ -7,6 +7,15 @@
   let on = false;
   let seen = new WeakSet();   // har image sirf ek baar
   const originals = new Map(); // OFF par wapas lagane ke liye
+  let showOriginal = false;    // Alt+O: original / Hindi ke beech badlo
+
+  function toggleOriginal() {
+    showOriginal = !showOriginal;
+    for (const [img, o] of originals) {
+      if (o.hindi) img.src = showOriginal ? o.src : o.hindi;
+    }
+    return showOriginal;
+  }
   const queue = [];
   let io = null;
   let mo = null;
@@ -88,7 +97,9 @@
           s.removeAttribute("srcset");
         });
         img.dataset.mtDone = "1";
-        img.src = "data:image/png;base64," + res.image;
+        const hindi = "data:image/png;base64," + res.image;
+        originals.get(img).hindi = hindi;
+        if (!showOriginal) img.src = hindi;
       } else if (res && res.error) {
         console.warn("[manga-tr]", res.error);
         if (res.retry) setTimeout(() => seen.delete(img), 5000);
@@ -162,7 +173,11 @@
     restoreAll();
   }
 
-  chrome.runtime.onMessage.addListener((msg) => {
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg.type === "toggleOriginal") {
+      sendResponse({ showOriginal: toggleOriginal() });
+      return;
+    }
     if (msg.type === "state") {
       on = msg.on;
       on ? start() : stop();

@@ -6,12 +6,13 @@
 
 Japanese · Korean · Chinese · English → हिन्दी
 
-![version](https://img.shields.io/badge/version-v1.0.0-blue)
+![version](https://img.shields.io/badge/version-v2.0.0-blue)
 ![python](https://img.shields.io/badge/python-3.13-3776AB?logo=python&logoColor=white)
 ![platform](https://img.shields.io/badge/platform-Windows%2011-0078D6?logo=windows&logoColor=white)
 ![firefox](https://img.shields.io/badge/Firefox-supported-FF7139?logo=firefoxbrowser&logoColor=white)
 ![chrome](https://img.shields.io/badge/Chrome-supported-4285F4?logo=googlechrome&logoColor=white)
 ![ai](https://img.shields.io/badge/AI-Gemini%20%7C%20Groq%20%7C%20NLLB-8E75B2)
+![license](https://img.shields.io/badge/license-MIT-green)
 
 [English](README.md) | **Hinglish**
 
@@ -20,6 +21,17 @@ Japanese · Korean · Chinese · English → हिन्दी
 </div>
 
 ---
+
+<div align="center">
+
+| Pehle | Baad mein |
+|---|---|
+| <img src="docs/demo_before.png" width="420"> | <img src="docs/demo_after.png" width="420"> |
+
+*Ye demo page README ke liye banaya gaya hai. Left mein ladki bol rahi hai ("थक गई"), right mein ladka ("छोड़ दूंगा").*
+
+</div>
+
 
 ## Overview
 
@@ -39,48 +51,49 @@ isliye Hindi mein gender sahi aata hai: ladki bole to *"मैं थक गई"
 | **Gender ke hisaab se** | Verb bolne wale aur sunne wale ke gender se match karte hain |
 | **Character memory** | Har series mein characters ka gender yaad rakhta hai (`memory.json`) |
 | **4 languages** | Japanese, Korean, Chinese (Simplified / Traditional) aur English, Auto-detect ke saath |
-| **Bubble ke andar Hindi** | Speech bubble dhoondhta hai, purana text mitata hai aur Hindi bubble ki shape mein fit karta hai |
+| **ML bubble detection** | RT-DETR model bubbles, bubble ke andar ka text aur art ke upar ka text pehchanta hai, GPU par ~0.1 s per page |
+| **Saaf typesetting** | Sirf text ke pixels mitata hai, art ko LaMa inpainting se wapas banata hai aur Hindi comic font mein bubble ki shape mein fit karta hai |
 | **Backup chain** | Gemini → Groq → local NLLB. Free limit khatam ho to bhi padhna nahi rukta |
 | **Firefox aur Chrome** | Manifest V3 extension, kisi bhi site par chalta hai, "is site par hamesha ON" option ke saath |
-| **Tez padhai** | Aage ke pages pehle se translate karta hai, 3 pages ek saath, aur results cache karta hai |
+| **Tez padhai** | Aage ke pages pehle se translate karta hai, 3 pages ek saath, aur results disk par cache karta hai |
+| **Free limit bachata hai** | Ek AI request mein 3 pages tak, isliye roz ki free limit mein ~3 guna pages |
+| **Original / Hindi toggle** | **Alt+O** dabao, saare pages original aur phir Hindi mein badal jaate hain |
 | **Local first** | `127.0.0.1` par chalta hai. API keys aapke PC par hi rehti hain, kabhi commit nahi hoti |
 
 ## Kaise kaam karta hai
 
 ```mermaid
 flowchart TD
-    A[Manga page<br/>Firefox / Chrome] -->|image screen par aayi| B[Extension<br/>content.js]
+    A[Manga page<br/>Firefox / Chrome] -->|image screen par aayi<br/>ya aane wali hai| B[Extension<br/>content.js, 3 pages ek saath]
     B -->|image + page URL| C[background.js]
     C -->|canvas / Referer ke saath fetch / screenshot| D[Local server<br/>FastAPI :7860]
 
-    D --> E{Cache mein hai?}
+    D --> E{Memory ya disk cache mein?}
     E -->|haan| R[Translated image wapas]
-    E -->|nahi| F[Windows OCR<br/>text + boxes]
+    E -->|nahi| F[Windows OCR<br/>text lines + language]
 
-    F --> G{Language}
-    G -->|Auto| G1[Japanese / Korean / Chinese / English pehchano]
-    G -->|fixed| H
-    G1 --> H[Lines ko group karo]
+    F --> G[ML detector<br/>comic-text-and-bubble-detector ONNX]
+    G --> G1[bubble / text_bubble / text_free boxes]
+    G1 --> H[OCR lines ko text boxes mein baanto<br/>padhne ka order]
 
-    H --> I[Bubble detection<br/>OpenCV: band safed area + kaali outline]
-    I --> J{OCR ko text mila?}
-    J -->|nahi| K[Gemini khud text dhoondhe<br/>gemini-detect]
-    J -->|haan| L[Har bubble par laal box + number]
-
+    H --> I[Batcher<br/>1.5 s rukta hai, 3 pages tak jodta hai]
+    I --> L[Har text box par laal box + number]
     L --> M{AI translation}
-    M -->|1| M1[Gemini Flash-Lite<br/>image + bubbles + character memory]
+    M -->|1| M1[Gemini Flash-Lite<br/>page images + bubbles + character memory]
     M -->|limit / error| M2[Groq gpt-oss]
     M -->|dono fail| M3[Local NLLB]
     M1 --> N
     M2 --> N
     M3 --> N
-    K --> N
 
-    N[Casual Hindi<br/>gender ke hisaab se] --> O[Purana text mitao<br/>bubble mask / convex hull]
-    O --> P[Hindi bubble ki shape mein fit<br/>Noto Sans Devanagari + raqm]
-    P --> Q[(memory.json<br/>characters ka gender)]
+    N[Casual Hindi<br/>gender ke hisaab se] --> O{Text bubble ke andar?}
+    O -->|haan| O1[Text pixels mitao,<br/>Hindi bubble ke oval mein fit]
+    O -->|nahi, art ke upar| O2[LaMa inpainting<br/>background wapas banao]
+    O1 --> P[Hindi likho<br/>Baloo 2 + raqm]
+    O2 --> P
+    P --> Q[(memory.json + cache/)]
     P --> R
-    R --> S[Extension img src badal deta hai]
+    R --> S[Extension img src badal deta hai<br/>Alt+O se original]
 ```
 
 ## Tech stack
@@ -90,9 +103,10 @@ flowchart TD
 | Browser extension | JavaScript, Manifest V3 (Firefox 128+ / Chrome) |
 | Server | Python 3.13, FastAPI, Uvicorn |
 | OCR | Windows 11 ka built-in OCR (`winrt`) |
-| Bubble detection | OpenCV |
+| Bubble / text detection | `ogkalu/comic-text-and-bubble-detector` (RT-DETR-v2, ONNX Runtime + DirectML), OpenCV fallback |
+| Inpainting | LaMa (`Carve/LaMa-ONNX`), OpenCV fallback |
 | Translation | Google Gemini Flash-Lite, Groq (`openai/gpt-oss-120b`), Meta NLLB-200 600M (offline) |
-| Hindi likhna | Pillow + libraqm / FriBiDi, Noto Sans Devanagari |
+| Hindi likhna | Pillow + libraqm / FriBiDi, Baloo 2 (Noto Sans Devanagari fallback) |
 
 ## Project structure
 
@@ -110,6 +124,8 @@ manga-translator/
 │   ├── render.py              # bubble detection, text mitana aur Hindi likhna
 │   ├── llm.py                 # Gemini / Groq prompts, backup chain, character memory
 │   ├── nllb.py                # offline NLLB backup
+│   ├── detector.py            # ML bubble / text detector (ONNX, DirectML GPU)
+│   ├── inpaint.py             # art ke upar ke text ke liye LaMa inpainting
 │   ├── config.example.json    # ise config.json naam se copy karke keys daalo
 │   └── fonts/
 ├── SETUP.bat                  # ek baar ka setup
@@ -135,7 +151,7 @@ INSTALL_OCR_LANGUAGES.bat
 ```
 
 **2. Setup chalao.** Ye virtual environment banata hai, dependencies install karta hai, aur Hindi font,
-Hindi ki matras sahi jodne wali FriBiDi DLL aur NLLB model download karta hai.
+Hindi ki matras sahi jodne wali FriBiDi DLL, ML detector aur LaMa models (~380 MB) aur NLLB model download karta hai.
 
 ```bat
 SETUP.bat
@@ -176,6 +192,7 @@ SETUP.bat
 
 - **"Is site par hamesha ON"** tick karo, us site par apne aap chalega.
 - **Auto** ki jagah language fix karoge to pages jaldi translate honge.
+- Original page se milane ke liye **Alt+O** dabao (ya popup ka button).
 
 ## Configuration
 
@@ -190,6 +207,8 @@ SETUP.bat
 | `groq.model` | `openai/gpt-oss-120b` | Groq model ka naam |
 | `groq.vision` | `false` | Groq ko page image bhi bhejo (vision model chahiye) |
 | `image_max_side` | `1024` | AI ko bheji image ka size. Chhota = kam tokens |
+| `batch_pages` | `3` | Ek AI request mein zyaada se zyaada itne pages |
+| `batch_wait` | `1.5` | Request bhejne se pehle aur pages ke liye kitne second ruke |
 
 ## Troubleshooting
 
@@ -214,22 +233,31 @@ Debug ke liye server log mein har page ki language, kaunsa provider chala aur ha
 ## Kamiyan (Known limitations)
 
 - Windows OCR bahut stylish, italic ya khade (vertical) text ko theek se nahi padhta. Aisi bubbles Gemini image se padh leta hai.
-- Andhere background wali ya doosri bubble se judi bubbles hamesha pakdi nahi jaati.
-- Art ke upar likha text (bubble ke bahar) saada patch se dhaka jaata hai, inpainting nahi hoti.
+- LaMa inpainting CPU par chalta hai (art ke upar har text block ke liye ~2 s), kyunki ye DirectML par nahi chalta.
+- Bahut chhoti bubbles mein Hindi chhoti aati hai, kyunki Hindi aksar English se lambi hoti hai.
 - Gemini ki free tier mein roz ki request limit hai, jo Google AI Studio mein har project ke liye set hoti hai.
 
 ## Roadmap
 
-- [ ] ML bubble aur text detector (`comic-text-and-bubble-detector`)
+- [x] ML bubble aur text detector (`comic-text-and-bubble-detector`)
+- [x] Art ke upar text ke liye LaMa inpainting
+- [x] Ek AI request mein kai pages, taaki free limit zyaada chale
+- [x] Disk cache: dobara khole chapter par request kharch nahi
+- [x] Comic style Devanagari font (Baloo 2)
+- [x] Original / Hindi toggle (Alt+O)
 - [ ] Behtar OCR: Japanese ke liye `manga-ocr`, English / Korean / Chinese ke liye PaddleOCR
-- [ ] Art ke upar text ke liye LaMa inpainting
-- [ ] Ek AI request mein kai pages, taaki free limit zyaada chale
-- [ ] Comic style Devanagari fonts
+- [ ] Signed Firefox add-on (permanent install)
+
+## License
+
+[MIT License](LICENSE) ke tahat. Saath ke fonts (Noto Sans Devanagari, Baloo 2) SIL Open Font License mein hain, aur download hone wale models Apache-2.0 mein.
 
 ## Acknowledgements
 
 - Translation ke liye [Google Gemini](https://ai.google.dev/), [Groq](https://groq.com/) aur [Meta NLLB-200](https://huggingface.co/facebook/nllb-200-distilled-600M)
-- Hindi font ke liye [Noto Sans Devanagari](https://fonts.google.com/noto/specimen/Noto+Sans+Devanagari)
+- Hindi fonts ke liye [Baloo 2](https://fonts.google.com/specimen/Baloo+2) aur [Noto Sans Devanagari](https://fonts.google.com/noto/specimen/Noto+Sans+Devanagari)
+- Bubble aur text pehchanne ke liye [ogkalu/comic-text-and-bubble-detector](https://huggingface.co/ogkalu/comic-text-and-bubble-detector)
+- Inpainting ke liye [LaMa](https://github.com/advimman/lama) ([Carve ka ONNX version](https://huggingface.co/Carve/LaMa-ONNX))
 - Inspiration: [manga-image-translator](https://github.com/zyddnys/manga-image-translator), [BallonsTranslator](https://github.com/dmMaze/BallonsTranslator) aur [comic-translate](https://github.com/ogkalu2/comic-translate)
 
 ---

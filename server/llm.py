@@ -83,19 +83,30 @@ def update_memory(key, characters, recent_pairs):
 
 
 # ---------- prompt ----------
-def build_prompt(groups, lang, img_size, memory, with_image):
-    W, H = img_size
+def build_prompt(groups, lang, img_size, memory, with_image, pages=None):
+    """pages = [(img_size, groups), ...] ek saath kai pages; ids poore batch mein lagataar."""
+    if pages is None:
+        pages = [(img_size, groups)]
     bubbles = []
-    for i, g in enumerate(groups, 1):
-        x0, y0, x1, y1 = g["box"]
-        box = [round(x0 * 1000 / W), round(y0 * 1000 / H), round(x1 * 1000 / W), round(y1 * 1000 / H)]
-        bubbles.append({"id": i, "box": box, "text": g["text"] or "(OCR could not read this bubble: read it from the image)"})
+    i = 0
+    for pno, (size, gs) in enumerate(pages, 1):
+        W, H = size
+        for g in gs:
+            i += 1
+            x0, y0, x1, y1 = g["box"]
+            box = [round(x0 * 1000 / W), round(y0 * 1000 / H), round(x1 * 1000 / W), round(y1 * 1000 / H)]
+            item = {"id": i, "box": box, "text": g["text"] or "(OCR could not read this bubble: read it from the image)"}
+            if len(pages) > 1:
+                item["page"] = pno
+            bubbles.append(item)
 
     chars = ", ".join(f"{n} ({'female' if g == 'f' else 'male'})"
                       for n, g in memory["characters"].items()) or "none yet"
     recent = "\n".join(f"- {s} => {h}" for s, h in memory["recent"]) or "none"
 
-    look = ("The manga page image is attached. Each bubble is marked with a RED BOX and a RED NUMBER = its id. "
+    multi = (f"{len(pages)} consecutive pages are attached in reading order (image 1 = page 1, ...). "
+             "They are one continuous story: use earlier pages as context. " if len(pages) > 1 else "")
+    look = (multi + "The manga page image is attached. Each bubble is marked with a RED BOX and a RED NUMBER = its id. "
             "OCR is often incomplete or garbled (missing lines, wrong letters): for each id, READ THE REAL FULL TEXT "
             "inside that red box in the image and translate that, not the OCR. If a red box has no text, return \"\" for it. "
             "Also look at who is speaking each bubble (bubble tail, character face, clothes) to decide the speaker's gender."
@@ -110,7 +121,7 @@ def build_prompt(groups, lang, img_size, memory, with_image):
                   if with_extra else "- Set \"extra\" to [].")
     return f"""You translate {LANG_NAMES.get(lang, lang)} manga/manhwa/comic dialogue into natural, casual spoken Hindi.
 
-Text bubbles on this page (OCR output, may contain small OCR mistakes; box = [x0,y0,x1,y1] on a 0-1000 scale):
+Text bubbles (OCR output, may contain small OCR mistakes; box = [x0,y0,x1,y1] on a 0-1000 scale):
 {json.dumps(bubbles, ensure_ascii=False)}
 
 {look}
@@ -143,18 +154,18 @@ Return ONLY JSON:
 Include every id exactly once."""
 
 
-def mark_bubbles(img, groups):
+def mark_bubbles(img, groups, start=1):
     """AI ke liye har bubble par laal box + id number (kaunsa text kis bubble ka, ye pakka ho)."""
     from PIL import ImageDraw, ImageFont
     im = img.convert("RGB").copy()
     d = ImageDraw.Draw(im)
     size = max(18, img.size[0] // 30)
     try:
-        font = ImageFont.truetype(r"C:\Windows\Fontsrialbd.ttf", size)
+        font = ImageFont.truetype(os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts", "arialbd.ttf"), size)
     except OSError:
         font = ImageFont.load_default()
-    for i, g in enumerate(groups, 1):
-        x0, y0, x1, y1 = g["bubble"][3] if "bubble" in g else g["box"]
+    for i, g in enumerate(groups, start):
+        x0, y0, x1, y1 = g["box"] if "kind" in g else (g["bubble"][3] if "bubble" in g else g["box"])
         d.rectangle([x0, y0, x1, y1], outline=(255, 0, 0), width=max(2, size // 8))
         tx, ty = x0 + 2, max(0, y0 - size // 3)
         d.rectangle([tx, ty, tx + size * (0.7 * len(str(i)) + 0.3), ty + size * 1.1], fill=(255, 0, 0))
@@ -202,8 +213,8 @@ def _check(r, name):
 def call_gemini(cfg, prompt, img_b64):
     c = cfg["gemini"]
     parts = [{"text": prompt}]
-    if img_b64:
-        parts.append({"inline_data": {"mime_type": "image/jpeg", "data": img_b64}})
+    for b in (img_b64 if isinstance(img_b64, list) else [img_b64] if img_b64 else []):
+        parts.append({"inline_data": {"mime_type": "image/jpeg", "data": b}})
     models = c["model"] if isinstance(c["model"], list) else [c["model"]]
     last = None
     for model in models:
@@ -241,9 +252,10 @@ def call_gemini(cfg, prompt, img_b64):
 
 def call_groq(cfg, prompt, img_b64):
     c = cfg["groq"]
-    if img_b64:
-        content = [{"type": "text", "text": prompt},
-                   {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + img_b64}}]
+    imgs = img_b64 if isinstance(img_b64, list) else [img_b64] if img_b64 else []
+    if imgs:
+        content = [{"type": "text", "text": prompt}] + [
+            {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + b}} for b in imgs]
     else:
         content = prompt
     r = requests.post(
@@ -285,11 +297,13 @@ def provider_status():
     return out
 
 
-def translate_with_llm(img, groups, lang, page_url=""):
-    """Return (hindi_list, provider_name) ya None agar koi AI provider kaam na kare."""
+def translate_pages(pages, lang, page_url=""):
+    """pages = [(img, groups), ...]. Return ([hindi_list per page], provider) ya None."""
     cfg = load_config()
     key = series_key(page_url)
     memory = get_memory(key)
+    all_groups = [g for _, gs in pages for g in gs]
+    total = len(all_groups)
 
     for name in cfg["providers"]:
         if name not in PROVIDERS:
@@ -298,27 +312,32 @@ def translate_with_llm(img, groups, lang, page_url=""):
         if not pc.get("api_key") or _cooldown.get(name, 0) > time.time():
             continue
         with_image = name == "gemini" or pc.get("vision", False)
-        prompt = build_prompt(groups, lang, img.size, memory, with_image)
-        img_b64 = _jpeg_b64(mark_bubbles(img, groups), cfg["image_max_side"]) if with_image else None
+        prompt = build_prompt(None, lang, None, memory, with_image,
+                              pages=[(im.size, gs) for im, gs in pages])
+        imgs = None
+        if with_image:
+            imgs, start = [], 1
+            for im, gs in pages:
+                imgs.append(_jpeg_b64(mark_bubbles(im, gs, start), cfg["image_max_side"]))
+                start += len(gs)
         try:
             t = time.time()
-            raw = PROVIDERS[name](cfg, prompt, img_b64)
+            raw = PROVIDERS[name](cfg, prompt, imgs)
             data = _parse_json(raw)
             by_id = {int(l["id"]): l for l in data.get("lines", []) if "id" in l}
-            hindi = [clean_hi(by_id.get(i, {}).get("hi", "")) for i in range(1, len(groups) + 1)]
+            hindi = [clean_hi(by_id.get(i, {}).get("hi", "")) for i in range(1, total + 1)]
             if not any(hindi):
                 raise RuntimeError("koi translation nahi aayi")
             _strikes[name] = 0
-            pairs = [[g["text"], h] for g, h in zip(groups, hindi) if h][-8:]
+            pairs = [[g["text"], h] for g, h in zip(all_groups, hindi) if h and g["text"]][-8:]
             update_memory(key, data.get("characters"), pairs)
-            genders = "".join(str(by_id.get(i, {}).get("gender", "u"))[:1] for i in range(1, len(groups) + 1))
-            print(f"[{name}] {len(groups)} bubbles, gender={genders}, {time.time() - t:.1f}s")
-            extras = []  # ab bubbles hum khud dhoondhte hain; AI ke andaaze wale box galat jagah aate the
-            # jo extra OCR boxes ke upar hi hai, wo duplicate: hatao
-            extras = [e for e in extras if not any(_overlap(e["box"], g["box"]) > 0.4 for g in groups)]
-            if extras:
-                print(f"[{name}] +{len(extras)} bubbles jo OCR se chhoot gaye the")
-            return hindi, name, extras
+            genders = "".join(str(by_id.get(i, {}).get("gender", "u"))[:1] for i in range(1, total + 1))
+            print(f"[{name}] {len(pages)} page(s), {total} bubbles, gender={genders}, {time.time() - t:.1f}s")
+            out, k = [], 0
+            for _, gs in pages:
+                out.append(hindi[k:k + len(gs)])
+                k += len(gs)
+            return out, name
         except RateLimited as e:
             _strikes[name] = _strikes.get(name, 0) + 1
             wait = 60 if _strikes[name] < 3 else 3600  # baar baar 429 = roz ki limit khatam
@@ -327,6 +346,63 @@ def translate_with_llm(img, groups, lang, page_url=""):
         except Exception as e:
             print(f"[{name}] fail: {e}")
     return None
+
+
+# ---------- batching: thodi der ruk kar aas-paas ke pages ek hi request mein ----------
+import queue as _queue
+
+_jobs = _queue.Queue()
+_worker = None
+_worker_lock = threading.Lock()
+
+
+def _batch_worker():
+    while True:
+        first = _jobs.get()
+        batch = [first]
+        cfg = load_config()
+        max_pages = max(1, int(cfg.get("batch_pages", 3)))
+        deadline = time.time() + float(cfg.get("batch_wait", 1.5))
+        while len(batch) < max_pages:
+            left = deadline - time.time()
+            if left <= 0:
+                break
+            try:
+                j = _jobs.get(timeout=left)
+            except _queue.Empty:
+                break
+            if j["lang"] == first["lang"] and series_key(j["url"]) == series_key(first["url"]):
+                batch.append(j)
+            else:
+                _jobs.put(j)  # dusri series: agle batch mein
+                break
+        # ek request mein bahut zyada bubbles na hon
+        while len(batch) > 1 and sum(len(j["groups"]) for j in batch) > 45:
+            _jobs.put(batch.pop())
+        try:
+            res = translate_pages([(j["img"], j["groups"]) for j in batch], first["lang"], first["url"])
+        except Exception as e:
+            print("[batch] fail:", e)
+            res = None
+        for n, j in enumerate(batch):
+            j["result"] = (res[0][n], res[1]) if res else None
+            j["done"].set()
+
+
+def translate_with_llm(img, groups, lang, page_url=""):
+    """Return (hindi_list, provider_name, extras) ya None. Aas-paas ke pages apne aap ek request mein jaate hain."""
+    global _worker
+    with _worker_lock:
+        if _worker is None:
+            _worker = threading.Thread(target=_batch_worker, daemon=True)
+            _worker.start()
+    job = {"img": img, "groups": groups, "lang": lang, "url": page_url, "done": threading.Event()}
+    _jobs.put(job)
+    job["done"].wait(timeout=240)
+    r = job.get("result")
+    if not r:
+        return None
+    return r[0], r[1], []
 
 
 def boxes_from_llm(lines, W, H):

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Local Manga Translator (Hindi)",
-  "version": "2.0",
+  "version": "2.1",
   "description": "Manga/manhwa pages ko casual Hindi mein translate karta hai (Gemini/Groq/NLLB, local server se).",
   "permissions": [
     "activeTab",
@@ -30,6 +30,12 @@
         "default": "Alt+T"
       },
       "description": "Is tab par translation ON/OFF"
+    },
+    "toggle-original": {
+      "suggested_key": {
+        "default": "Alt+O"
+      },
+      "description": "Original / Hindi page ke beech badlo"
     }
   },
   "content_scripts": [

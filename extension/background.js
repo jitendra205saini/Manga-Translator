@@ -39,9 +39,10 @@ async function setTabOn(tab, on) {
 
 // Shortcut (Alt+T) -> is tab ka ON/OFF
 chrome.commands.onCommand.addListener(async (cmd) => {
-  if (cmd !== "toggle-translate") return;
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab) await setTabOn(tab, !(await isOn(tab.id)));
+  if (!tab) return;
+  if (cmd === "toggle-translate") await setTabOn(tab, !(await isOn(tab.id)));
+  if (cmd === "toggle-original") chrome.tabs.sendMessage(tab.id, { type: "toggleOriginal" }).catch(() => {});
 });
 
 // Navigation: "hamesha ON" wali site par apne aap ON, badge wapas lagao

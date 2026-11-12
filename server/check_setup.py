@@ -25,3 +25,7 @@ for lang, tag in LANG_TAGS.items():
 
 import llm
 print("AI providers   :", llm.provider_status())
+
+import detector, inpaint
+print("ML detector    :", "OK" if detector.available() else "nahi mila (SETUP.bat chalao) - OpenCV tarika chalega")
+print("LaMa inpaint   :", "OK" if inpaint.available() else "nahi mila - OpenCV inpaint chalega")

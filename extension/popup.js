@@ -36,6 +36,13 @@ const $ = (id) => document.getElementById(id);
     await chrome.runtime.sendMessage({ type: "setTab", tabId: tab.id, on });
   };
 
+  $("orig").onclick = async () => {
+    try {
+      const r = await chrome.tabs.sendMessage(tab.id, { type: "toggleOriginal" });
+      $("orig").textContent = r && r.showOriginal ? "Hindi dikhao (Alt+O)" : "Original dikhao (Alt+O)";
+    } catch (e) {}
+  };
+
   $("lang").onchange = () => chrome.storage.local.set({ lang: $("lang").value });
 
   $("always").onchange = async () => {

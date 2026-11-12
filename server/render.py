@@ -8,6 +8,7 @@ from PIL import ImageDraw, ImageFont, features
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FONT_CANDIDATES = [
+    os.path.join(HERE, "fonts", "Baloo2.ttf"),  # comic jaisa, OFL license
     os.path.join(HERE, "fonts", "NotoSansDevanagari-Regular.ttf"),
     r"C:\Windows\Fonts\Nirmala.ttc",
     r"C:\Windows\Fonts\Nirmala.ttf",
@@ -24,6 +25,11 @@ def get_font(size):
     if font is None:
         layout = ImageFont.Layout.RAQM if HAS_RAQM else ImageFont.Layout.BASIC
         font = ImageFont.truetype(FONT_PATH, size, layout_engine=layout)
+        try:
+            if b"SemiBold" in font.get_variation_names():
+                font.set_variation_by_name("SemiBold")
+        except Exception:
+            pass  # variable font nahi
         _fonts[size] = font
     return font
 
@@ -446,3 +452,81 @@ def assign_to_bubbles(img, groups):
 
 def _contains(a, b):
     return a[0] <= b[0] and a[1] <= b[1] and a[2] >= b[2] and a[3] >= b[3]
+
+
+# ---------------- ML detector wale groups (kind = "bubble" / "free") ----------------
+def _ellipse_mask(w, h, shrink=0.06):
+    m = np.zeros((h, w), np.uint8)
+    cv2.ellipse(m, (w // 2, h // 2), (max(1, int(w * (0.5 - shrink))), max(1, int(h * (0.5 - shrink)))),
+                0, 0, 360, 1, -1)
+    return m
+
+
+def _is_flat(arr, box):
+    x0, y0, x1, y1 = box
+    region = arr[max(0, y0 - 6):y1 + 6, max(0, x0 - 6):x1 + 6]
+    if region.size == 0:
+        return True
+    g = cv2.cvtColor(region, cv2.COLOR_RGB2GRAY)
+    border = np.concatenate([g[0], g[-1], g[:, 0], g[:, -1]])
+    return border.std() < 18
+
+
+def render_ml(img, groups, texts):
+    import inpaint
+    arr = np.array(img.convert("RGB"))
+    H, W = arr.shape[:2]
+    plans = []
+    for g, text in zip(groups, texts):
+        text = (text or "").strip()
+        if not text:
+            continue
+        x0, y0, x1, y1 = g["box"]
+        p = 6
+        ebox = (max(0, x0 - p), max(0, y0 - p), min(W, x1 + p), min(H, y1 + p))
+        bg = bg_color(arr, ebox, pad=2)
+        if g["kind"] == "bubble" and g.get("bbox"):
+            bx0, by0, bx1, by1 = g["bbox"]
+            bub = arr[by0:by1, bx0:bx1]
+            bbg = bg_color(arr, (bx0 + (bx1 - bx0) // 4, by0 + (by1 - by0) // 4,
+                                 bx1 - (bx1 - bx0) // 4, by1 - (by1 - by0) // 4), pad=0)
+            bg = (255, 255, 255) if luminance(bbg) > 200 else bbg
+            # text pixels mitao (bubble outline bachi rahe: sirf text box ke andar)
+            m = inpaint.text_mask(arr, ebox, grow=3)
+            if m is not None:
+                arr[ebox[1]:ebox[3], ebox[0]:ebox[2]][m.astype(bool)] = bg
+            # Hindi: bubble ke andar ka oval, jo bubble ke rang ka ho
+            em = _ellipse_mask(bx1 - bx0, by1 - by0)
+            gray = cv2.cvtColor(bub, cv2.COLOR_RGB2GRAY).astype(np.int16)
+            same = (np.abs(gray - int(luminance(bg))) < 60).astype(np.uint8)
+            same = cv2.morphologyEx(same, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+            mask = em & same
+            if mask.sum() < 0.3 * em.sum():
+                mask = em
+            plans.append(("mask", text, mask, bx0, by0, bg, g["thickness"] * 1.3))
+        else:
+            m = inpaint.text_mask(arr, ebox, grow=4)
+            if m is not None:
+                if _is_flat(arr, g["box"]):
+                    arr[ebox[1]:ebox[3], ebox[0]:ebox[2]][m.astype(bool)] = bg
+                else:
+                    full = np.zeros((H, W), np.uint8)
+                    full[ebox[1]:ebox[3], ebox[0]:ebox[2]] = m
+                    inpaint.inpaint_region(arr, full, ebox)
+                    bg = bg_color(arr, ebox, pad=2)
+            plans.append(("box", text, ebox, bg, g["thickness"]))
+
+    from PIL import Image
+    out = Image.fromarray(arr)
+    draw = ImageDraw.Draw(out)
+    for p in plans:
+        if p[0] == "mask":
+            _, text, mask, ox, oy, bg, thick = p
+            fg = (0, 0, 0) if luminance(bg) > 128 else (255, 255, 255)
+            draw_in_mask(draw, text, mask, ox, oy, fg, bg, thick)
+        else:
+            _, text, box, bg, thick = p
+            fg = (0, 0, 0) if luminance(bg) > 128 else (255, 255, 255)
+            sbg = (255, 255, 255) if fg == (0, 0, 0) else (0, 0, 0)
+            draw_in_box(draw, text, box, fg, sbg, thick)
+    return out

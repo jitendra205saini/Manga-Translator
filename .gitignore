@@ -7,3 +7,5 @@ server/bin/
 manga_env/
 __pycache__/
 *.pyc
+server/models/
+server/cache/

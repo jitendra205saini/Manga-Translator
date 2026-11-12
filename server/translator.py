@@ -4,6 +4,7 @@ import base64
 import hashlib
 import os
 import io
+import json
 import re
 import statistics
 import time
@@ -11,10 +12,11 @@ from collections import OrderedDict
 
 from PIL import Image
 
+import detector
 import llm
 from nllb import translate_texts
 from ocr_windows import CJK_LANGS, OcrLanguageMissing, recognize_lines
-from render import assign_to_bubbles, attach_bubbles, render_translations
+from render import assign_to_bubbles, attach_bubbles, render_ml, render_translations
 
 KANA = re.compile(r"[\u3040-\u30ff]")
 LATIN = re.compile(r"[A-Za-z]")
@@ -140,6 +142,75 @@ def group_lines(lines, lang):
     return groups
 
 
+def _center_in(box, outer, pad=6):
+    cx, cy = (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
+    return outer[0] - pad <= cx <= outer[2] + pad and outer[1] - pad <= cy <= outer[3] + pad
+
+
+def _area(b):
+    return max(1, (b[2] - b[0]) * (b[3] - b[1]))
+
+
+def ml_groups(img, lines, lang):
+    """ML detector se text regions; OCR lines unme baanto. Region ka OCR na mile to AI image se padhega."""
+    dets = detector.detect(img)
+    bubbles = [d["box"] for d in dets if d["label"] == "bubble"]
+    groups = []
+    for d in dets:
+        if d["label"] == "bubble":
+            continue
+        box = d["box"]
+        mine = [l for l in lines if _center_in(l["box"], box)]
+        sep = "" if lang in CJK_LANGS else " "
+        if lang in CJK_LANGS and (box[3] - box[1]) > 1.3 * (box[2] - box[0]):
+            mine.sort(key=lambda l: (-l["box"][2], l["box"][1]))
+        else:
+            mine.sort(key=lambda l: (l["box"][1], l["box"][0]))
+        text = sep.join(l["text"] for l in mine)
+        if lang == "en" and text:
+            text = _fix_english(text)
+        # text ka bubble: jo bubble is text ke center ko sabse chhota gherta hai
+        bbox = None
+        if d["label"] == "text_bubble":
+            cands = [b for b in bubbles if _center_in(box, b, pad=0)]
+            if cands:
+                bbox = min(cands, key=_area)
+        th = statistics.median([_thick(l["box"]) for l in mine]) if mine else             max(16, min(40, min(box[2] - box[0], box[3] - box[1]) / 3))
+        groups.append({"lines": mine, "text": text, "box": box, "bbox": bbox,
+                       "kind": "bubble" if bbox else "free", "vertical": False, "thickness": th})
+    # padhne ka order
+    Hh = max((g["box"][3] for g in groups), default=1)
+    band = max(1, Hh // 6)
+    groups.sort(key=lambda g: (g["box"][1] // band, -g["box"][2] if lang == "ja" else g["box"][0]))
+    return groups
+
+
+# ---------- disk cache (server band hone par bhi yaad) ----------
+CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache")
+CACHE_VERSION = "v2"
+
+
+def _disk_get(key):
+    path = os.path.join(CACHE_DIR, key + ".json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def _disk_put(key, result):
+    try:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        with open(os.path.join(CACHE_DIR, key + ".json"), "w", encoding="utf-8") as f:
+            json.dump(result, f)
+        files = sorted((os.path.join(CACHE_DIR, n) for n in os.listdir(CACHE_DIR)), key=os.path.getmtime)
+        for old in files[:-400]:  # sirf aakhri 400 pages
+            os.remove(old)
+    except Exception as e:
+        print("[cache] save fail:", e)
+
+
 def groups_from_found(found):
     out = []
     for f in found:
@@ -173,10 +244,15 @@ def save_debug(img, out):
 
 
 async def translate_page(raw, lang_choice="Auto", page_url=""):
-    key = hashlib.md5(raw).hexdigest() + "|" + lang_choice
+    key = hashlib.md5(raw).hexdigest() + "_" + lang_choice + "_" + CACHE_VERSION
     if key in _cache:
         _cache.move_to_end(key)
         return _cache[key]
+    disk = _disk_get(key)
+    if disk:
+        print(f"[cache] disk se mila ({disk.get('bubbles')} bubbles)")
+        _cache[key] = disk
+        return disk
 
     t0 = time.time()
     img = Image.open(io.BytesIO(raw)).convert("RGB")
@@ -186,13 +262,19 @@ async def translate_page(raw, lang_choice="Auto", page_url=""):
             lang, lines = lang_choice, await recognize_lines(img, lang_choice)
         else:
             lang, lines = await detect_and_ocr(img)
-        groups = group_lines(lines, lang)
-        groups = await asyncio.to_thread(assign_to_bubbles, img, groups)
-        # padhne ka order dobara (khaali bubbles bhi jude hain)
-        Hh = max((g["box"][3] for g in groups), default=1)
-        band = max(1, Hh // 6)
-        groups.sort(key=lambda g: (g["box"][1] // band, -g["box"][2] if lang == "ja" else g["box"][0]))
-    if not any(g["text"] for g in groups):  # OCR ko kuch nahi mila (italic/stylized): Gemini khud dhoondhe
+        use_ml = detector.available()
+        if use_ml:
+            groups = await asyncio.to_thread(ml_groups, img, lines, lang)
+        else:
+            groups = group_lines(lines, lang)
+            groups = await asyncio.to_thread(assign_to_bubbles, img, groups)
+            # padhne ka order dobara (khaali bubbles bhi jude hain)
+            Hh = max((g["box"][3] for g in groups), default=1)
+            band = max(1, Hh // 6)
+            groups.sort(key=lambda g: (g["box"][1] // band, -g["box"][2] if lang == "ja" else g["box"][0]))
+    if use_ml and not groups:
+        result = {"image": None, "lang": lang, "bubbles": 0}
+    elif not use_ml and not any(g["text"] for g in groups):  # OCR ko kuch nahi mila (italic/stylized): Gemini khud dhoondhe
         found = await asyncio.to_thread(llm.detect_with_llm, img, page_url)
         if found:
             async with _ocr_lock:
@@ -228,7 +310,8 @@ async def translate_page(raw, lang_choice="Auto", page_url=""):
             groups, hindi = groups + egroups, list(hindi) + hindi_for(egroups, extras)
             for e in extras:
                 print(f"    [extra] {e['text']}  ->  {e['hi']}")
-        out = await asyncio.to_thread(render_translations, img, groups, hindi)
+        renderer = render_ml if use_ml else render_translations
+        out = await asyncio.to_thread(renderer, img, groups, hindi)
         save_debug(img, out)
         buf = io.BytesIO()
         out.save(buf, format="PNG", compress_level=1)
@@ -239,6 +322,8 @@ async def translate_page(raw, lang_choice="Auto", page_url=""):
     print(f"[translate] {img.size} lang={lang} via={result.get('provider', '-')} bubbles={result['bubbles']} {time.time() - t0:.1f}s")
     if result.get("provider") != "nllb":  # NLLB backup wala result cache nahi, taaki baad mein AI se dobara ho
         _cache[key] = result
+        if result.get("image"):
+            await asyncio.to_thread(_disk_put, key, result)
     if len(_cache) > MAX_CACHE:
         _cache.popitem(last=False)
     return result
