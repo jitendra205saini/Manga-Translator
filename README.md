@@ -1,8 +1,29 @@
 # Manga Translator (JA / KO / ZH / EN -> casual Hindi)
 
-Browser mein manga/manhwa padhte waqt pages ko apne aap casual Hindi mein translate karta hai.
+![version](https://img.shields.io/badge/version-v1.0.0-blue)
+![python](https://img.shields.io/badge/python-3.13-3776AB?logo=python&logoColor=white)
+![platform](https://img.shields.io/badge/platform-Windows%2011-0078D6?logo=windows&logoColor=white)
+![firefox](https://img.shields.io/badge/Firefox-extension-FF7139?logo=firefoxbrowser&logoColor=white)
+![chrome](https://img.shields.io/badge/Chrome-extension-4285F4?logo=googlechrome&logoColor=white)
+![gemini](https://img.shields.io/badge/AI-Gemini%20%7C%20Groq%20%7C%20NLLB-8E75B2)
+![language](https://img.shields.io/badge/output-Hindi-FF9933)
+
+## Description
+
+**Manga Translator** ek free, local tool hai jo browser mein manga, manhwa aur comics padhte waqt pages ko
+apne aap **casual (bolchaal wali) Hindi** mein translate karke usi image par likh deta hai, jaise page pehle se Hindi mein ho.
+
+- Japanese, Korean, Chinese aur English pages support
+- Bolne wale ke **gender ke hisaab se** Hindi ("main thak gayi" / "main thak gaya")
+- Shuddh Hindi nahi, roz ki bolchaal wali Hindi
+- Purana text mitakar Hindi bubble ke andar fit hoti hai
+- Firefox aur Chrome dono par, kisi bhi site par
+
 Translation Gemini se hoti hai (image dekhkar, bolne wale ke gender ke hisaab se). Gemini na chale to Groq,
 aur dono na chalein to local NLLB (offline backup).
+
+**Topics / Tags:** `manga` `manga-translator` `manhwa` `comics` `translation` `hindi` `ocr` `gemini` `groq` `llm`
+`browser-extension` `firefox-extension` `chrome-extension` `fastapi` `python` `opencv`
 
 ## Kaise kaam karta hai
 
