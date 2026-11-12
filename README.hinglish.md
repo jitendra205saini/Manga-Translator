@@ -58,7 +58,7 @@ isliye Hindi mein gender sahi aata hai: ladki bole to *"मैं थक गई"
 | **ML bubble detection** | RT-DETR model bubbles, bubble ke andar ka text aur art ke upar ka text pehchanta hai, GPU par ~0.1 s per page |
 | **Saaf typesetting** | Sirf text ke pixels mitata hai, art ko LaMa inpainting se wapas banata hai aur Hindi comic font mein bubble ki shape mein fit karta hai |
 | **Backup chain** | Gemini → Groq (Qwen vision model, image bhi dekhta hai) → local NLLB. Free limit khatam ho to bhi padhna nahi rukta |
-| **Firefox aur Chrome** | Manifest V3 extension, kisi bhi site par chalta hai, "is site par hamesha ON" option ke saath |
+| **Firefox aur Chrome** | Manifest V3 extension, kisi bhi site par chalta hai, "Always on for this site" option ke saath |
 | **Tez padhai** | Aage ke pages pehle se, 3 pages ek saath, AI ke jawab ke dauraan hi text mitana, har series ki language yaad, aur disk cache |
 | **Free limit bachata hai** | Ek AI request mein 3 pages tak, isliye roz ki free limit mein ~3 guna pages |
 | **Original / Hindi toggle** | **Alt+O** dabao, saare pages original aur phir Hindi mein badal jaate hain |
@@ -182,7 +182,7 @@ SETUP.bat
 
 - **Chrome:** `chrome://extensions` kholo, *Developer mode* ON karo, *Load unpacked* dabao aur `extension` folder chuno.
 - **Firefox:** `about:debugging#/runtime/this-firefox` kholo, *Load Temporary Add-on* dabao aur `extension/manifest.json` chuno.
-  Phir extension popup kholke **"Pehle permission do"** dabao.
+  Phir extension popup kholke **"Grant site access first"** dabao.
 
 > [!NOTE]
 > Firefox band karne par temporary add-on hat jaata hai. Har restart ke baad dobara load karo, ya Mozilla se sign karwa ke permanently install karo.
@@ -199,7 +199,7 @@ SETUP.bat
 
 **Tips**
 
-- **"Is site par hamesha ON"** tick karo, us site par apne aap chalega.
+- **"Always on for this site"** tick karo, us site par apne aap chalega.
 - **Auto** ki jagah language fix karoge to pages jaldi translate honge.
 - Original page se milane ke liye **Alt+O** dabao (ya popup ka button).
 

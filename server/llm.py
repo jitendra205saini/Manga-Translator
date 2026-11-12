@@ -316,7 +316,7 @@ def provider_status():
         elif not cfg.get(p, {}).get("api_key"):
             out[p] = "no key"
         elif _cooldown.get(p, 0) > time.time():
-            out[p] = f"limit, {int(_cooldown[p] - time.time())}s baad"
+            out[p] = f"limit reached, retry in {int(_cooldown[p] - time.time())}s"
         else:
             out[p] = "ready"
     return out

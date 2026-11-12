@@ -58,7 +58,7 @@ uses the correct gender: a girl says *"मैं थक गई"*, a boy says *"�
 | **ML bubble detection** | An RT-DETR model finds bubbles, text inside bubbles and text on artwork, in about 0.1 s per page on the GPU |
 | **Clean typesetting** | Erases only the text pixels, rebuilds artwork with LaMa inpainting and fits Hindi to the bubble shape in a comic-style font |
 | **Fallback chain** | Gemini → Groq (Qwen vision model, also sees the image) → local NLLB, so reading never stops when a free limit runs out |
-| **Firefox & Chrome** | Manifest V3 extension that works on any site, with an "always on for this site" option |
+| **Firefox & Chrome** | Manifest V3 extension that works on any site, with an "Always on for this site" option |
 | **Fast reading** | Prefetches upcoming pages, translates 3 pages in parallel, erases text while the AI is answering, remembers each series' language and caches results on disk |
 | **Saves free quota** | Sends up to 3 pages in one AI request, so the free daily limit covers about 3 times more pages |
 | **Original / Hindi toggle** | Press **Alt+O** to flip every page back to the original and again to Hindi |
@@ -183,7 +183,7 @@ SETUP.bat
 
 - **Chrome:** open `chrome://extensions`, enable *Developer mode*, click *Load unpacked* and select the `extension` folder.
 - **Firefox:** open `about:debugging#/runtime/this-firefox`, click *Load Temporary Add-on* and select `extension/manifest.json`.
-  Then open the extension popup and click **"Pehle permission do"** to grant site access.
+  Then open the extension popup and click **"Grant site access first"** to grant site access.
 
 > [!NOTE]
 > Firefox removes temporary add-ons when it closes. Load it again after each restart, or sign the add-on through Mozilla to install it permanently.
@@ -200,7 +200,7 @@ SETUP.bat
 
 **Tips**
 
-- Tick **"Is site par hamesha ON"** to turn the translator on automatically for that site.
+- Tick **"Always on for this site"** to turn the translator on automatically for that site.
 - Pick a fixed language instead of **Auto** to make pages translate faster.
 - Press **Alt+O** (or the popup button) to compare with the original page.
 

@@ -111,7 +111,7 @@ let captureChain = Promise.resolve();
 function captureCrop(tab, rect) {
   const job = captureChain.then(async () => {
     const t = await chrome.tabs.get(tab.id);
-    if (!t.active) throw new Error("tab active nahi hai");
+    if (!t.active) throw new Error("tab is not active");
     const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
     await sleep(550);
     const bmp = await createImageBitmap(await (await fetch(dataUrl)).blob());
@@ -135,13 +135,13 @@ async function postServer(body) {
       body: JSON.stringify(body),
     });
   } catch (e) {
-    return { error: "Local server se connect nahi hua. START_SERVER.bat chalao.", retry: true };
+    return { error: "Cannot reach the local server. Run START_SERVER.bat.", retry: true };
   }
   return await res.json();
 }
 
 async function handleTranslate(msg, tab) {
-  if (!tab || !(await isOn(tab.id))) return { error: "tab OFF hai" };
+  if (!tab || !(await isOn(tab.id))) return { error: "translation is OFF for this tab" };
   const base = { lang: (await getSettings()).lang, page_url: tab.url || "" };
 
   // 1) content script ne canvas se image di
@@ -159,7 +159,7 @@ async function handleTranslate(msg, tab) {
 
   // 4) screenshot + crop (image poori screen par ho tab)
   if (!b64 && msg.rect) b64 = await captureCrop(tab, msg.rect).catch((e) => { console.warn("capture fail", e); return null; });
-  if (!b64) return { error: "image nahi mil payi (poori image screen par laao)", retry: true };
+  if (!b64) return { error: "could not get the image (scroll the whole page into view)", retry: true };
   return postServer({ ...base, image: b64 });
 }
 

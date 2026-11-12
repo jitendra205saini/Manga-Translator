@@ -22,7 +22,7 @@ const $ = (id) => document.getElementById(id);
   const { lang, sites } = await chrome.storage.local.get({ lang: "Auto", sites: [] });
 
   const paint = () => {
-    $("toggle").textContent = on ? "ON (is tab par)" : "OFF";
+    $("toggle").textContent = on ? "ON (this tab)" : "OFF";
     $("toggle").classList.toggle("on", on);
   };
   paint();
@@ -39,7 +39,7 @@ const $ = (id) => document.getElementById(id);
   $("orig").onclick = async () => {
     try {
       const r = await chrome.tabs.sendMessage(tab.id, { type: "toggleOriginal" });
-      $("orig").textContent = r && r.showOriginal ? "Hindi dikhao (Alt+O)" : "Original dikhao (Alt+O)";
+      $("orig").textContent = r && r.showOriginal ? "Show Hindi (Alt+O)" : "Show original (Alt+O)";
     } catch (e) {}
   };
 
@@ -59,8 +59,8 @@ const $ = (id) => document.getElementById(id);
     const r = await (await fetch("http://127.0.0.1:7860/health")).json();
     const lines = Object.entries(r.providers || {}).map(([p, s]) =>
       `<div>${p}: <span class="${s === "ready" ? "ok" : "bad"}">${s}</span></div>`);
-    $("status").innerHTML = `<div class="ok">Server chal raha hai (${r.device})</div>` + lines.join("");
+    $("status").innerHTML = `<div class="ok">Server running (${r.device})</div>` + lines.join("");
   } catch (e) {
-    $("status").innerHTML = `<span class="bad">Server band hai. START_SERVER.bat chalao.</span>`;
+    $("status").innerHTML = `<span class="bad">Server is not running. Start START_SERVER.bat.</span>`;
   }
 })();
