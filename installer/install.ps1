@@ -60,6 +60,7 @@ catch {
     Write-Host "[ERROR] $_" -ForegroundColor Red
     Write-Host "Internet check karke installer dobara chalao. Log: $Log"
     Stop-Transcript | Out-Null
-    Read-Host "Enter dabao"
+    Add-Type -AssemblyName PresentationFramework
+    [System.Windows.MessageBox]::Show("Setup could not finish: $_`n`nCheck your internet connection and run the installer again.`nLog: $Log", "Manga Translator", "OK", "Error") | Out-Null
     exit 1
 }

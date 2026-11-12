@@ -54,7 +54,7 @@ Name: "{userstartup}\{#AppName} server"; Filename: "{app}\python\pythonw.exe"; P
 
 [Run]
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\installer\install.ps1"" -AppDir ""{app}"""; \
-  StatusMsg: "Downloading Python and AI models (about 600 MB, a few minutes)..."; Flags: waituntilterminated
+  StatusMsg: "Downloading Python and AI models (about 600 MB, a few minutes)..."; Flags: waituntilterminated runhidden
 Filename: "{app}\installer\browser.html"; Description: "Add the extension to my browser"; Flags: postinstall shellexec skipifsilent
 Filename: "{app}\python\pythonw.exe"; Parameters: """{app}\server\launch.py"""; WorkingDir: "{app}\server"; \
   Description: "Start Manga Translator now"; Flags: postinstall nowait skipifsilent
