@@ -13,6 +13,8 @@ Japanese · Korean · Chinese · English → हिन्दी
 ![chrome](https://img.shields.io/badge/Chrome-supported-4285F4?logo=googlechrome&logoColor=white)
 ![ai](https://img.shields.io/badge/AI-Gemini%20%7C%20Groq%20%7C%20NLLB-8E75B2)
 
+**English** | [Hinglish](README.hinglish.md)
+
 [Features](#features) · [How it works](#how-it-works) · [Installation](#installation) · [Usage](#usage) · [Configuration](#configuration) · [Troubleshooting](#troubleshooting)
 
 </div>
