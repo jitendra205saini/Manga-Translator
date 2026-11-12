@@ -242,7 +242,8 @@ def draw_in_mask(draw, text, mask, ox, oy, fg, bg, thickness, tbox=None):
     cy = (my + ys.mean()) / 2
     bw = xs.max() - xs.min()
     max_size = int(max(12, min(thickness * 1.1 if thickness else 40, 44)))
-    for size in range(max_size, 9, -1):
+
+    def layout(size):
         font = get_font(size)
         lh = int(size * 1.45)
         # alag-alag chaudai try karo: patli bubble mein zyada lines
@@ -250,8 +251,22 @@ def draw_in_mask(draw, text, mask, ox, oy, fg, bg, thickness, tbox=None):
             lines = wrap_text(draw, text, font, bw * frac)
             widths = [draw.textlength(l, font=font) for l in lines]
             if _fits(inner, cx, cy, lines, widths, lh):
-                _draw_lines(draw, lines, font, lh, ox + cx, oy + cy, fg, bg, size)
-                return
+                return font, lines, lh
+        return None
+
+    # binary search: sabse bada size jo fit ho (pehle har size ek-ek karke try hota tha)
+    lo, hi, best = 10, max_size, None
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        r = layout(mid)
+        if r:
+            best, lo = (mid, r), mid + 1
+        else:
+            hi = mid - 1
+    if best:
+        size, (font, lines, lh) = best
+        _draw_lines(draw, lines, font, lh, ox + cx, oy + cy, fg, bg, size)
+        return
     font = get_font(10)
     lines = wrap_text(draw, text, font, bw * 0.8)
     _draw_lines(draw, lines, font, 14, ox + cx, oy + cy, fg, bg, 10)
@@ -472,22 +487,21 @@ def _is_flat(arr, box):
     return border.std() < 18
 
 
-def render_ml(img, groups, texts):
+def erase_ml(img, groups):
+    """Translation se pehle hi saare text mitao (AI ke jawab ke intezaar ke saath-saath chalta hai).
+    Return (orig_arr, erased_arr, plans) - plans[i] = group i ke likhne ki jagah."""
     import inpaint
-    arr = np.array(img.convert("RGB"))
+    orig = np.array(img.convert("RGB"))
+    arr = orig.copy()
     H, W = arr.shape[:2]
     plans = []
-    for g, text in zip(groups, texts):
-        text = (text or "").strip()
-        if not text:
-            continue
+    for g in groups:
         x0, y0, x1, y1 = g["box"]
         p = 6
         ebox = (max(0, x0 - p), max(0, y0 - p), min(W, x1 + p), min(H, y1 + p))
         bg = bg_color(arr, ebox, pad=2)
         if g["kind"] == "bubble" and g.get("bbox"):
             bx0, by0, bx1, by1 = g["bbox"]
-            bub = arr[by0:by1, bx0:bx1]
             bbg = bg_color(arr, (bx0 + (bx1 - bx0) // 4, by0 + (by1 - by0) // 4,
                                  bx1 - (bx1 - bx0) // 4, by1 - (by1 - by0) // 4), pad=0)
             bg = (255, 255, 255) if luminance(bbg) > 200 else bbg
@@ -496,6 +510,7 @@ def render_ml(img, groups, texts):
             if m is not None:
                 arr[ebox[1]:ebox[3], ebox[0]:ebox[2]][m.astype(bool)] = bg
             # Hindi: bubble ke andar ka oval, jo bubble ke rang ka ho
+            bub = arr[by0:by1, bx0:bx1]
             em = _ellipse_mask(bx1 - bx0, by1 - by0)
             gray = cv2.cvtColor(bub, cv2.COLOR_RGB2GRAY).astype(np.int16)
             same = (np.abs(gray - int(luminance(bg))) < 60).astype(np.uint8)
@@ -503,7 +518,7 @@ def render_ml(img, groups, texts):
             mask = em & same
             if mask.sum() < 0.3 * em.sum():
                 mask = em
-            plans.append(("mask", text, mask, bx0, by0, bg, g["thickness"] * 1.3))
+            plans.append(("mask", ebox, mask, bx0, by0, bg, g["thickness"] * 1.3))
         else:
             m = inpaint.text_mask(arr, ebox, grow=4)
             if m is not None:
@@ -514,19 +529,30 @@ def render_ml(img, groups, texts):
                     full[ebox[1]:ebox[3], ebox[0]:ebox[2]] = m
                     inpaint.inpaint_region(arr, full, ebox)
                     bg = bg_color(arr, ebox, pad=2)
-            plans.append(("box", text, ebox, bg, g["thickness"]))
+            plans.append(("box", ebox, None, 0, 0, bg, g["thickness"]))
+    return orig, arr, plans
+
+
+def render_ml(img, groups, texts, pre=None):
+    orig, arr, plans = pre if pre is not None else erase_ml(img, groups)
+    arr = arr.copy()
+    # jis text ka AI ne "" diya (watermark / noise), uska original wapas
+    for (kind, ebox, *_), text in zip(plans, texts):
+        if not (text or "").strip():
+            x0, y0, x1, y1 = ebox
+            arr[y0:y1, x0:x1] = orig[y0:y1, x0:x1]
 
     from PIL import Image
     out = Image.fromarray(arr)
     draw = ImageDraw.Draw(out)
-    for p in plans:
-        if p[0] == "mask":
-            _, text, mask, ox, oy, bg, thick = p
-            fg = (0, 0, 0) if luminance(bg) > 128 else (255, 255, 255)
+    for (kind, ebox, mask, ox, oy, bg, thick), text in zip(plans, texts):
+        text = (text or "").strip()
+        if not text:
+            continue
+        fg = (0, 0, 0) if luminance(bg) > 128 else (255, 255, 255)
+        if kind == "mask":
             draw_in_mask(draw, text, mask, ox, oy, fg, bg, thick)
         else:
-            _, text, box, bg, thick = p
-            fg = (0, 0, 0) if luminance(bg) > 128 else (255, 255, 255)
             sbg = (255, 255, 255) if fg == (0, 0, 0) else (0, 0, 0)
-            draw_in_box(draw, text, box, fg, sbg, thick)
+            draw_in_box(draw, text, ebox, fg, sbg, thick)
     return out

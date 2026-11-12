@@ -53,9 +53,9 @@ uses the correct gender: a girl says *"मैं थक गई"*, a boy says *"�
 | **4 source languages** | Japanese, Korean, Chinese (Simplified / Traditional) and English, with auto-detect |
 | **ML bubble detection** | An RT-DETR model finds bubbles, text inside bubbles and text on artwork, in about 0.1 s per page on the GPU |
 | **Clean typesetting** | Erases only the text pixels, rebuilds artwork with LaMa inpainting and fits Hindi to the bubble shape in a comic-style font |
-| **Fallback chain** | Gemini → Groq → local NLLB, so reading never stops when a free limit runs out |
+| **Fallback chain** | Gemini → Groq (Qwen vision model, also sees the image) → local NLLB, so reading never stops when a free limit runs out |
 | **Firefox & Chrome** | Manifest V3 extension that works on any site, with an "always on for this site" option |
-| **Fast reading** | Prefetches upcoming pages, translates 3 pages in parallel and caches results on disk |
+| **Fast reading** | Prefetches upcoming pages, translates 3 pages in parallel, erases text while the AI is answering, remembers each series' language and caches results on disk |
 | **Saves free quota** | Sends up to 3 pages in one AI request, so the free daily limit covers about 3 times more pages |
 | **Original / Hindi toggle** | Press **Alt+O** to flip every page back to the original and again to Hindi |
 | **Local first** | Runs on `127.0.0.1`. API keys stay on your PC and are never committed |
@@ -79,7 +79,7 @@ flowchart LR
 
     subgraph A[AI translation]
         direction TB
-        A1[Gemini Flash-Lite<br/>images + numbered boxes] -.->|limit / error| A2[Groq]
+        A1[Gemini Flash-Lite<br/>images + numbered boxes] -.->|limit / error| A2[Groq<br/>Qwen vision]
         A2 -.->|fails| A3[Local NLLB]
     end
 
@@ -210,8 +210,8 @@ SETUP.bat
 | `gemini.api_key` | `""` | Your Gemini key (or set the `GEMINI_API_KEY` environment variable) |
 | `gemini.model` | Flash-Lite models | One model or a list. The next one is tried if a model is busy |
 | `groq.api_key` | `""` | Your Groq key (or set `GROQ_API_KEY`) |
-| `groq.model` | `openai/gpt-oss-120b` | Groq model name |
-| `groq.vision` | `false` | Send the page image to Groq (needs a vision model) |
+| `groq.model` | `["qwen/qwen3.8-27b", "openai/gpt-oss-120b"]` | One model or a list, tried in order |
+| `groq.vision_models` | `["qwen/qwen3.8-27b"]` | Models that also receive the page image, so gender works on the fallback too |
 | `image_max_side` | `1024` | Size of the image sent to the AI. Smaller uses fewer tokens |
 | `batch_pages` | `3` | Up to this many pages are translated in one AI request |
 | `batch_wait` | `1.5` | Seconds to wait for more pages before sending a request |
@@ -239,7 +239,7 @@ gender (`m` / `f` / `u`). The original and translated versions of the last 40 pa
 ## Known limitations
 
 - Windows OCR struggles with very stylized, italic or vertical text. Gemini reads those bubbles from the image instead.
-- LaMa inpainting runs on the CPU (about 2 s per text block on artwork), because it does not run on DirectML.
+- LaMa inpainting runs on the CPU (about 2 s per text block on artwork), because it does not run on DirectML. It runs while the AI request is in flight, so it adds little extra time.
 - Very small bubbles get small Hindi text, because Hindi is usually longer than the English it replaces.
 - Gemini's free tier has a daily request limit, which is set per project in Google AI Studio.
 

@@ -17,7 +17,8 @@ MEMORY_PATH = os.path.join(HERE, "memory.json")
 DEFAULT_CONFIG = {
     "providers": ["gemini", "groq", "nllb"],
     "gemini": {"api_key": "", "model": ["gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-2.5-flash-lite"]},
-    "groq": {"api_key": "", "model": "openai/gpt-oss-120b", "vision": False},
+    "groq": {"api_key": "", "model": ["qwen/qwen3.8-27b", "openai/gpt-oss-120b"],
+             "vision_models": ["qwen/qwen3.8-27b"]},
     "image_max_side": 1024,
 }
 
@@ -250,24 +251,42 @@ def call_gemini(cfg, prompt, img_b64):
     raise RuntimeError(f"gemini: {last}")
 
 
-def call_groq(cfg, prompt, img_b64):
+def call_groq(cfg, prompt, img_b64, prompt_txt=None):
+    """Models ki list try karo. vision_models ko image milti hai, baaki ko sirf text wala prompt."""
     c = cfg["groq"]
+    models = c["model"] if isinstance(c["model"], list) else [c["model"]]
+    vision = set(c.get("vision_models", []))
+    if c.get("vision") and not isinstance(c["model"], list):
+        vision.add(c["model"])
     imgs = img_b64 if isinstance(img_b64, list) else [img_b64] if img_b64 else []
-    if imgs:
-        content = [{"type": "text", "text": prompt}] + [
-            {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + b}} for b in imgs]
-    else:
-        content = prompt
-    r = requests.post(
-        "https://api.groq.com/openai/v1/chat/completions",
-        headers={"Authorization": "Bearer " + c["api_key"]},
-        json={"model": c["model"], "temperature": 0.5,
-              "response_format": {"type": "json_object"},
-              "messages": [{"role": "user", "content": content}]},
-        timeout=90,
-    )
-    _check(r, "groq")
-    return r.json()["choices"][0]["message"]["content"]
+    last, limited = None, False
+    for model in models:
+        if imgs and model in vision:
+            content = [{"type": "text", "text": prompt}] + [
+                {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + b}} for b in imgs]
+        else:
+            content = prompt_txt or prompt
+        r = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": "Bearer " + c["api_key"]},
+            json={"model": model, "temperature": 0.5,
+                  "response_format": {"type": "json_object"},
+                  "messages": [{"role": "user", "content": content}]},
+            timeout=90,
+        )
+        if r.status_code == 429:
+            last, limited = f"{model}: limit", True
+            continue
+        if r.status_code in (400, 404, 500, 503):
+            last = f"{model}: HTTP {r.status_code} {r.text[:150]}"
+            continue
+        _check(r, "groq " + model)
+        out = r.json()["choices"][0]["message"]["content"]
+        print(f"[groq] model={model} image={'haan' if content is not prompt and not isinstance(content, str) else 'nahi'}")
+        return out
+    if limited:
+        raise RateLimited("groq: sab models ki limit khatam")
+    raise RuntimeError(f"groq: {last}")
 
 
 PROVIDERS = {"gemini": call_gemini, "groq": call_groq}
@@ -311,9 +330,10 @@ def translate_pages(pages, lang, page_url=""):
         pc = cfg.get(name, {})
         if not pc.get("api_key") or _cooldown.get(name, 0) > time.time():
             continue
-        with_image = name == "gemini" or pc.get("vision", False)
-        prompt = build_prompt(None, lang, None, memory, with_image,
-                              pages=[(im.size, gs) for im, gs in pages])
+        with_image = name == "gemini" or bool(pc.get("vision") or pc.get("vision_models"))
+        page_list = [(im.size, gs) for im, gs in pages]
+        prompt = build_prompt(None, lang, None, memory, with_image, pages=page_list)
+        prompt_txt = build_prompt(None, lang, None, memory, False, pages=page_list) if with_image else None
         imgs = None
         if with_image:
             imgs, start = [], 1
@@ -322,7 +342,8 @@ def translate_pages(pages, lang, page_url=""):
                 start += len(gs)
         try:
             t = time.time()
-            raw = PROVIDERS[name](cfg, prompt, imgs)
+            raw = (PROVIDERS[name](cfg, prompt, imgs, prompt_txt) if name == "groq"
+                   else PROVIDERS[name](cfg, prompt, imgs))
             data = _parse_json(raw)
             by_id = {int(l["id"]): l for l in data.get("lines", []) if "id" in l}
             hindi = [clean_hi(by_id.get(i, {}).get("hi", "")) for i in range(1, total + 1)]

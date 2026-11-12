@@ -1,7 +1,27 @@
 {
-  "providers": ["gemini", "groq", "nllb"],
-  "gemini": {"api_key": "", "model": ["gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-2.5-flash-lite"]},
-  "groq": {"api_key": "", "model": "openai/gpt-oss-120b", "vision": false},
+  "providers": [
+    "gemini",
+    "groq",
+    "nllb"
+  ],
+  "gemini": {
+    "api_key": "",
+    "model": [
+      "gemini-3.5-flash-lite",
+      "gemini-flash-lite-latest",
+      "gemini-2.5-flash-lite"
+    ]
+  },
+  "groq": {
+    "api_key": "",
+    "model": [
+      "qwen/qwen3.8-27b",
+      "openai/gpt-oss-120b"
+    ],
+    "vision_models": [
+      "qwen/qwen3.8-27b"
+    ]
+  },
   "image_max_side": 1024,
   "batch_pages": 3,
   "batch_wait": 1.5

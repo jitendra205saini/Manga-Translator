@@ -19,6 +19,17 @@ import translator
 @asynccontextmanager
 async def lifespan(app):
     # NLLB sirf backup hai: startup par load nahi, zaroorat padne par hoga
+    # detector + LaMa pehle se load: pehla page intezaar na kare
+    def warm():
+        import detector, inpaint
+        try:
+            if detector.available():
+                detector._session()
+            if inpaint.available():
+                inpaint._session()
+        except Exception as e:
+            print("[server] warm-up fail:", e)
+    await asyncio.to_thread(warm)
     print("[server] ready on http://127.0.0.1:7860")
     yield
 

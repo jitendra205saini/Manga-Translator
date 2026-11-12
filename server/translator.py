@@ -16,7 +16,7 @@ import detector
 import llm
 from nllb import translate_texts
 from ocr_windows import CJK_LANGS, OcrLanguageMissing, recognize_lines
-from render import assign_to_bubbles, attach_bubbles, render_ml, render_translations
+from render import assign_to_bubbles, attach_bubbles, erase_ml, render_ml, render_translations
 
 KANA = re.compile(r"[\u3040-\u30ff]")
 LATIN = re.compile(r"[A-Za-z]")
@@ -25,6 +25,7 @@ HAN = re.compile(r"[\u4e00-\u9fff]")
 VALID_LANGS = {"ja", "ko", "zh_hans", "zh_hant", "en"}
 
 _cache = OrderedDict()
+_series_lang = {}  # series -> pehchani hui language (Auto mode tez)
 _ocr_lock = asyncio.Lock()   # OCR/render ek time par ek; AI calls ek saath chal sakti hain
 _nllb_lock = asyncio.Lock()  # GPU
 MAX_CACHE = 60
@@ -258,10 +259,21 @@ async def translate_page(raw, lang_choice="Auto", page_url=""):
     img = Image.open(io.BytesIO(raw)).convert("RGB")
 
     async with _ocr_lock:
+        t_ocr = time.time()
+        skey = llm.series_key(page_url)
         if lang_choice in VALID_LANGS:
             lang, lines = lang_choice, await recognize_lines(img, lang_choice)
+        elif skey in _series_lang:
+            # is series ki language pehle se pata: sirf ek OCR pass (pehle 4 tak hote the)
+            lang = _series_lang[skey]
+            lines = await recognize_lines(img, lang)
+            if sum(len(l["text"]) for l in lines) < 4:
+                lang, lines = await detect_and_ocr(img)
         else:
             lang, lines = await detect_and_ocr(img)
+        if lang_choice not in VALID_LANGS and sum(len(l["text"]) for l in lines) >= 20:
+            _series_lang[skey] = lang
+        t_ocr = time.time() - t_ocr
         use_ml = detector.available()
         if use_ml:
             groups = await asyncio.to_thread(ml_groups, img, lines, lang)
@@ -292,7 +304,10 @@ async def translate_page(raw, lang_choice="Auto", page_url=""):
         else:
             result = {"image": None, "lang": lang, "bubbles": 0}
     else:
+        # text mitana (LaMa) aur AI translation saath-saath
+        erase_task = asyncio.create_task(asyncio.to_thread(erase_ml, img, groups)) if use_ml else None
         ai = await asyncio.to_thread(llm.translate_with_llm, img, groups, lang, page_url)
+        pre = await erase_task if erase_task else None
         extras = []
         if ai:
             hindi, provider, extras = ai
@@ -310,8 +325,10 @@ async def translate_page(raw, lang_choice="Auto", page_url=""):
             groups, hindi = groups + egroups, list(hindi) + hindi_for(egroups, extras)
             for e in extras:
                 print(f"    [extra] {e['text']}  ->  {e['hi']}")
-        renderer = render_ml if use_ml else render_translations
-        out = await asyncio.to_thread(renderer, img, groups, hindi)
+        if use_ml:
+            out = await asyncio.to_thread(render_ml, img, groups, hindi, pre)
+        else:
+            out = await asyncio.to_thread(render_translations, img, groups, hindi)
         save_debug(img, out)
         buf = io.BytesIO()
         out.save(buf, format="PNG", compress_level=1)
@@ -319,7 +336,8 @@ async def translate_page(raw, lang_choice="Auto", page_url=""):
         for g, h in zip(groups, hindi):
             print(f"    {g['text']}  ->  {h}")
 
-    print(f"[translate] {img.size} lang={lang} via={result.get('provider', '-')} bubbles={result['bubbles']} {time.time() - t0:.1f}s")
+    print(f"[translate] {img.size} lang={lang} via={result.get('provider', '-')} bubbles={result['bubbles']} "
+          f"{time.time() - t0:.1f}s (ocr {t_ocr:.1f}s)")
     if result.get("provider") != "nllb":  # NLLB backup wala result cache nahi, taaki baad mein AI se dobara ho
         _cache[key] = result
         if result.get("image"):
