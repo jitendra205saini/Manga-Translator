@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="extension/icons/icon128.png" width="110" alt="Manga Translator logo">
+
 # Manga Translator
 
 **Read manga, manhwa and comics in natural, casual Hindi, right in your browser.**
