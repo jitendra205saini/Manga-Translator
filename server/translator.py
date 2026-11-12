@@ -200,7 +200,7 @@ def ml_groups(img, lines, lang):
 
 # ---------- disk cache (server band hone par bhi yaad) ----------
 CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache")
-CACHE_VERSION = "v4"
+CACHE_VERSION = "v5"
 
 
 def _disk_get(key):

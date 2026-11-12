@@ -556,7 +556,13 @@ def erase_ml(img, groups):
             plans.append(("mask", ebox, mask, bx0, by0, bg, g["thickness"] * 1.3))
         else:
             flat = _is_flat(arr, g["box"])
-            m = inpaint.text_mask(arr, ebox, grow=4) if flat else inpaint.letter_mask(arr, ebox)
+            if flat:
+                m = inpaint.text_mask(arr, ebox, grow=4)
+            else:
+                # art par: letters + unki safed outline, thoda zyada phailao taaki nishaan na bache
+                lm = inpaint.letter_mask(arr, ebox, grow=5)
+                tm = inpaint.text_mask(arr, ebox, grow=2)
+                m = lm if tm is None else np.maximum(lm, tm & cv2.dilate(lm, np.ones((9, 9), np.uint8)))
             if m is not None:
                 if flat:
                     _erase(arr, ebox, m, bg)

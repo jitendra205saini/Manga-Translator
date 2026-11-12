@@ -109,7 +109,8 @@ def build_prompt(groups, lang, img_size, memory, with_image, pages=None):
              "They are one continuous story: use earlier pages as context. " if len(pages) > 1 else "")
     look = (multi + "The manga page image is attached. Each bubble is marked with a RED BOX and a RED NUMBER = its id. "
             "OCR is often incomplete or garbled (missing lines, wrong letters): for each id, READ THE REAL FULL TEXT "
-            "inside that red box in the image and translate that, not the OCR. If a red box has no text, return \"\" for it. "
+            "inside that red box in the image and translate that, not the OCR (it may be garbled like '*plain\"'). "
+            "Return \"\" ONLY if the red box has no readable words at all; a single quoted word like \"PLAIN\"...? is dialogue and must be translated. "
             "Also look at who is speaking each bubble (bubble tail, character face, clothes) to decide the speaker's gender."
             if with_image else
             "No image is given; infer the speaker's gender from speech style "
@@ -180,12 +181,12 @@ def clean_hi(text):
     # Hindi font mein English akshar nahi (dabbe bante hain): website/watermark jaise Latin hatao
     text = str(text or "")
     text = re.sub(r"\S*\.(com|net|org|io|co)\S*", "", text, flags=re.I)
-    text = re.sub(r"[A-Za-z]+", "", text)
+    # Baloo 2 font Latin bhi dikhata hai: "PLAIN" jaise chhote English shabd rehne do
     text = re.sub(r"\s+", " ", text).strip()
     # chillane wali dohrai: "हैईईईई", "हैयायायाया", "वोओओओ" -> ek baar
     text = re.sub(r"([\u0900-\u097f]{1,3}?)\1{3,}", r"\1\1", text)
     text = re.sub(r"([\u093e-\u094c\u0901\u0902])\1+", r"\1", text)
-    return text if re.search(r"[ऀ-ॿ]", text) else ""
+    return text if re.search(r"[ऀ-ॿA-Za-z]", text) else ""
 
 
 def _jpeg_b64(img, max_side):
