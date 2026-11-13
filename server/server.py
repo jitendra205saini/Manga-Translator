@@ -27,10 +27,15 @@ async def lifespan(app):
     def warm():
         import detector, inpaint
         try:
+            # sirf load nahi, ek dummy run bhi: GPU/CPU ka pehla run dheema hota hai (~15s), page ka nahi
+            import numpy as np
+            from PIL import Image
             if detector.available():
-                detector._session()
+                detector.detect(Image.new("RGB", (800, 1100), "white"))
             if inpaint.available():
-                inpaint._session()
+                arr = np.full((200, 200, 3), 255, np.uint8)
+                m = np.zeros((200, 200), np.uint8); m[80:120, 80:120] = 1
+                inpaint.inpaint_region(arr, m, (80, 80, 120, 120))
         except Exception as e:
             print("[server] warm-up fail:", e)
     await asyncio.to_thread(warm)

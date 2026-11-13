@@ -149,7 +149,7 @@
         if (img.complete && img.naturalWidth) enqueue(img);
         else img.addEventListener("load", () => enqueue(img), { once: true });
       }
-    }, { threshold: [0, 0.5, 1], rootMargin: "1500px 0px" });  // aage ke pages pehle se translate
+    }, { threshold: [0, 0.5, 1], rootMargin: "4000px 0px" });  // aage ke ~3-4 pages pehle se translate
     document.querySelectorAll("img").forEach(watch);
 
     // infinite scroll / naye pages

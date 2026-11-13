@@ -16,7 +16,7 @@ MEMORY_PATH = os.path.join(HERE, "memory.json")
 
 DEFAULT_CONFIG = {
     "providers": ["gemini", "groq", "nllb"],
-    "gemini": {"api_key": "", "model": ["gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-2.5-flash-lite"]},
+    "gemini": {"api_key": "", "model": ["gemini-3.5-flash-lite", "gemini-flash-lite-latest"]},
     "groq": {"api_key": "", "model": ["qwen/qwen3.8-27b", "openai/gpt-oss-120b"],
              "vision_models": ["qwen/qwen3.8-27b"]},
     "image_max_side": 1024,
@@ -217,12 +217,20 @@ def _check(r, name):
         raise RuntimeError(f"{name}: HTTP {r.status_code} {r.text[:300]}")
 
 
+_gemini_dead = set()
+_gemini_good = None
+
+
 def call_gemini(cfg, prompt, img_b64):
     c = cfg["gemini"]
     parts = [{"text": prompt}]
     for b in (img_b64 if isinstance(img_b64, list) else [img_b64] if img_b64 else []):
         parts.append({"inline_data": {"mime_type": "image/jpeg", "data": b}})
     models = c["model"] if isinstance(c["model"], list) else [c["model"]]
+    # jo model pichhli baar chala use pehle, jo mila hi nahi (404) use chhod do
+    models = [m for m in models if m not in _gemini_dead] or models
+    if _gemini_good in models:
+        models = [_gemini_good] + [m for m in models if m != _gemini_good]
     last = None
     for model in models:
         for attempt in range(2):
@@ -235,13 +243,14 @@ def call_gemini(cfg, prompt, img_b64):
             )
             if r.status_code in (500, 503):  # bheed: thoda ruko, phir agla model
                 last = f"{model}: HTTP {r.status_code}"
-                time.sleep(2)
+                time.sleep(1)
                 continue
             break
         else:
             continue
         if r.status_code == 404:
             last = f"{model}: model nahi mila"
+            _gemini_dead.add(model)
             continue
         if r.status_code == 429:
             last = f"{model}: limit"
@@ -249,7 +258,9 @@ def call_gemini(cfg, prompt, img_b64):
         _check(r, "gemini " + model)
         data = r.json()
         try:
-            return "".join(p.get("text", "") for p in data["candidates"][0]["content"]["parts"])
+            text = "".join(p.get("text", "") for p in data["candidates"][0]["content"]["parts"])
+            globals()["_gemini_good"] = model
+            return text
         except (KeyError, IndexError):
             last = f"{model}: khaali jawab {str(data)[:200]}"
     if last and last.endswith("limit"):
