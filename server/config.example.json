@@ -23,6 +23,6 @@
     ]
   },
   "image_max_side": 1024,
-  "batch_pages": 3,
-  "batch_wait": 1.5
+  "batch_pages": 1,
+  "batch_wait": 0.3
 }

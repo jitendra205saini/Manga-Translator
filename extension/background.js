@@ -18,7 +18,7 @@ async function setBadge(tabId, on) {
 const hostOf = (url) => { try { return new URL(url).hostname; } catch (e) { return ""; } };
 
 async function getSettings() {
-  const r = await chrome.storage.local.get({ lang: "Auto", sites: [] });
+  const r = await chrome.storage.local.get({ lang: "Auto", sites: [], fast: false });
   return r;
 }
 
@@ -142,7 +142,8 @@ async function postServer(body) {
 
 async function handleTranslate(msg, tab) {
   if (!tab || !(await isOn(tab.id))) return { error: "translation is OFF for this tab" };
-  const base = { lang: (await getSettings()).lang, page_url: tab.url || "" };
+  const st = await getSettings();
+  const base = { lang: st.lang, fast: !!st.fast, page_url: tab.url || "" };
 
   // 1) content script ne canvas se image di
   if (msg.image) return postServer({ ...base, image: msg.image });

@@ -19,7 +19,7 @@ const $ = (id) => document.getElementById(id);
 
   const k = `tab_${tab.id}`;
   let on = !!(await chrome.storage.session.get(k))[k];
-  const { lang, sites } = await chrome.storage.local.get({ lang: "Auto", sites: [] });
+  const { lang, sites, fast } = await chrome.storage.local.get({ lang: "Auto", sites: [], fast: false });
 
   const paint = () => {
     $("toggle").textContent = on ? "ON (this tab)" : "OFF";
@@ -27,6 +27,8 @@ const $ = (id) => document.getElementById(id);
   };
   paint();
   $("lang").value = lang;
+  $("fast").checked = fast;
+  $("fast").onchange = () => chrome.storage.local.set({ fast: $("fast").checked });
   $("always").checked = sites.includes(host);
   $("always").disabled = !host;
 

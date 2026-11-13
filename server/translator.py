@@ -256,7 +256,7 @@ def save_debug(img, out):
         print("[debug] save fail:", e)
 
 
-async def translate_page(raw, lang_choice="Auto", page_url=""):
+async def translate_page(raw, lang_choice="Auto", page_url="", fast=False):
     key = hashlib.md5(raw).hexdigest() + "_" + lang_choice + "_" + CACHE_VERSION
     if key in _cache:
         _cache.move_to_end(key)
@@ -318,7 +318,7 @@ async def translate_page(raw, lang_choice="Auto", page_url=""):
     else:
         # text mitana (LaMa) aur AI translation saath-saath
         erase_task = asyncio.create_task(asyncio.to_thread(erase_ml, img, groups)) if use_ml else None
-        ai = await asyncio.to_thread(llm.translate_with_llm, img, groups, lang, page_url)
+        ai = await asyncio.to_thread(llm.translate_with_llm, img, groups, lang, page_url, fast)
         pre = await erase_task if erase_task else None
         extras = []
         if ai:

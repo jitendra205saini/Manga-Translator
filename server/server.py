@@ -52,6 +52,7 @@ class TranslateRequest(BaseModel):
     src: str = ""        # image URL: server khud download karega (hotlink protection ke liye page ka Referer)
     lang: str = "Auto"
     page_url: str = ""
+    fast: bool = False   # Fast mode: Groq pehle
 
 
 def download_image(url, referer):
@@ -126,7 +127,7 @@ async def translate(req: TranslateRequest):
             raw = await asyncio.to_thread(download_image, req.src, req.page_url)
         else:
             return {"error": "image ya src nahi mila"}
-        return await translator.translate_page(raw, req.lang, req.page_url)
+        return await translator.translate_page(raw, req.lang, req.page_url, req.fast)
     except Exception as e:
         traceback.print_exc()
         return {"error": str(e)}

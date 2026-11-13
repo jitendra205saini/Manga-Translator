@@ -39,8 +39,8 @@
     pump();
   }
 
-  // ek saath 3 pages (AI ka intezaar parallel mein)
-  const WORKERS = 3;
+  // ek saath 5 pages (AI ka intezaar parallel mein)
+  const WORKERS = 5;
   let active = 0;
   function pump() {
     while (on && active < WORKERS && queue.length) {

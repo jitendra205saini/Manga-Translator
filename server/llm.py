@@ -334,7 +334,7 @@ def provider_status():
     return out
 
 
-def translate_pages(pages, lang, page_url=""):
+def translate_pages(pages, lang, page_url="", fast=False):
     """pages = [(img, groups), ...]. Return ([hindi_list per page], provider) ya None."""
     cfg = load_config()
     key = series_key(page_url)
@@ -342,7 +342,10 @@ def translate_pages(pages, lang, page_url=""):
     all_groups = [g for _, gs in pages for g in gs]
     total = len(all_groups)
 
-    for name in cfg["providers"]:
+    order = list(cfg["providers"])
+    if fast and "groq" in order:  # Fast mode: Groq bahut tez hai, Gemini backup
+        order = ["groq"] + [p for p in order if p != "groq"]
+    for name in order:
         if name not in PROVIDERS:
             continue
         pc = cfg.get(name, {})
@@ -393,6 +396,8 @@ import queue as _queue
 _jobs = _queue.Queue()
 _worker = None
 _worker_lock = threading.Lock()
+from concurrent.futures import ThreadPoolExecutor as _TPE  # noqa: E402
+_pool = _TPE(max_workers=5)
 
 
 def _batch_worker():
@@ -400,8 +405,8 @@ def _batch_worker():
         first = _jobs.get()
         batch = [first]
         cfg = load_config()
-        max_pages = max(1, int(cfg.get("batch_pages", 3)))
-        deadline = time.time() + float(cfg.get("batch_wait", 1.5))
+        max_pages = max(1, int(cfg.get("batch_pages", 1)))
+        deadline = time.time() + float(cfg.get("batch_wait", 0.3))
         while len(batch) < max_pages:
             left = deadline - time.time()
             if left <= 0:
@@ -410,7 +415,8 @@ def _batch_worker():
                 j = _jobs.get(timeout=left)
             except _queue.Empty:
                 break
-            if j["lang"] == first["lang"] and series_key(j["url"]) == series_key(first["url"]):
+            if (j["lang"] == first["lang"] and j["fast"] == first["fast"]
+                    and series_key(j["url"]) == series_key(first["url"])):
                 batch.append(j)
             else:
                 _jobs.put(j)  # dusri series: agle batch mein
@@ -418,24 +424,31 @@ def _batch_worker():
         # ek request mein bahut zyada bubbles na hon
         while len(batch) > 1 and sum(len(j["groups"]) for j in batch) > 45:
             _jobs.put(batch.pop())
-        try:
-            res = translate_pages([(j["img"], j["groups"]) for j in batch], first["lang"], first["url"])
-        except Exception as e:
-            print("[batch] fail:", e)
-            res = None
-        for n, j in enumerate(batch):
-            j["result"] = (res[0][n], res[1]) if res else None
-            j["done"].set()
+        # har batch alag thread mein: kai pages ki AI request ek saath chalti hai
+        _pool.submit(_run_batch, batch)
 
 
-def translate_with_llm(img, groups, lang, page_url=""):
+def _run_batch(batch):
+    first = batch[0]
+    try:
+        res = translate_pages([(j["img"], j["groups"]) for j in batch], first["lang"], first["url"], first["fast"])
+    except Exception as e:
+        print("[batch] fail:", e)
+        res = None
+    for n, j in enumerate(batch):
+        j["result"] = (res[0][n], res[1]) if res else None
+        j["done"].set()
+
+
+def translate_with_llm(img, groups, lang, page_url="", fast=False):
     """Return (hindi_list, provider_name, extras) ya None. Aas-paas ke pages apne aap ek request mein jaate hain."""
     global _worker
     with _worker_lock:
         if _worker is None:
             _worker = threading.Thread(target=_batch_worker, daemon=True)
             _worker.start()
-    job = {"img": img, "groups": groups, "lang": lang, "url": page_url, "done": threading.Event()}
+    job = {"img": img, "groups": groups, "lang": lang, "url": page_url, "fast": bool(fast),
+           "done": threading.Event()}
     _jobs.put(job)
     job["done"].wait(timeout=240)
     r = job.get("result")
