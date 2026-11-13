@@ -32,6 +32,9 @@ async def lifespan(app):
             from PIL import Image
             if detector.available():
                 detector.detect(Image.new("RGB", (800, 1100), "white"))
+            import mangaocr
+            if mangaocr.available():
+                mangaocr.read([Image.new("RGB", (60, 200), "white")])
             if inpaint.available():
                 arr = np.full((200, 200, 3), 255, np.uint8)
                 m = np.zeros((200, 200), np.uint8); m[80:120, 80:120] = 1

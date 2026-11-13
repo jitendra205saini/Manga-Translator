@@ -13,6 +13,7 @@ from collections import OrderedDict
 from PIL import Image
 
 import detector
+import mangaocr
 import llm
 from nllb import translate_texts
 from ocr_windows import CJK_LANGS, OcrLanguageMissing, recognize_lines
@@ -170,6 +171,7 @@ def ml_groups(img, lines, lang):
             continue
         keep.append(d)
     dets = keep
+    lang = _manga_ocr(img, dets, lines, lang)
     groups = []
     for d in dets:
         box = d["box"]
@@ -180,6 +182,8 @@ def ml_groups(img, lines, lang):
         else:
             mine.sort(key=lambda l: (l["box"][1], l["box"][0]))
         text = sep.join(l["text"] for l in mine)
+        if d.get("mocr"):  # Japanese: manga-ocr Windows OCR se kahin behtar (khada text, furigana)
+            text = d["mocr"]
         if lang == "en" and text:
             text = _fix_english(text)
         # text ka bubble: jo bubble is text ke center ko sabse chhota gherta hai
@@ -195,12 +199,38 @@ def ml_groups(img, lines, lang):
     Hh = max((g["box"][3] for g in groups), default=1)
     band = max(1, Hh // 6)
     groups.sort(key=lambda g: (g["box"][1] // band, -g["box"][2] if lang == "ja" else g["box"][0]))
-    return groups
+    return groups, lang
+
+
+def _manga_ocr(img, dets, lines, lang):
+    """Japanese page (ya aisa page jahan Windows OCR ko kuch khaas na mila): har text box manga-ocr se padho.
+    d["mocr"] mein text rakhta hai. Return: language (manga-ocr ko kana mile to "ja")."""
+    if not dets or not mangaocr.available():
+        return lang
+    latin = sum(len(LATIN.findall(l["text"])) for l in lines)
+    if lang != "ja" and not (lang == "en" and latin < 15):
+        return lang
+    W, H = img.size
+    crops = []
+    for d in dets:
+        x0, y0, x1, y1 = d["box"]
+        crops.append(img.crop((max(0, x0 - 4), max(0, y0 - 4), min(W, x1 + 4), min(H, y1 + 4))))
+    try:
+        texts = mangaocr.read(crops)
+    except Exception as e:
+        print("[manga-ocr] fail:", e)
+        return lang
+    if lang != "ja" and sum(len(KANA.findall(t)) for t in texts) < 5:
+        return lang  # Japanese nahi hai
+    for d, t in zip(dets, texts):
+        d["mocr"] = t if (KANA.search(t) or HAN.search(t)) else ""
+    print(f"[manga-ocr] {len(texts)} box(es) padhe")
+    return "ja"
 
 
 # ---------- disk cache (server band hone par bhi yaad) ----------
 CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache")
-CACHE_VERSION = "v5"
+CACHE_VERSION = "v6"
 
 
 def _disk_get(key):
@@ -288,7 +318,9 @@ async def translate_page(raw, lang_choice="Auto", page_url="", fast=False):
         t_ocr = time.time() - t_ocr
         use_ml = detector.available()
         if use_ml:
-            groups = await asyncio.to_thread(ml_groups, img, lines, lang)
+            groups, lang = await asyncio.to_thread(ml_groups, img, lines, lang)
+            if lang == "ja" and lang_choice not in VALID_LANGS:
+                _series_lang[skey] = "ja"
         else:
             groups = group_lines(lines, lang)
             groups = await asyncio.to_thread(assign_to_bubbles, img, groups)

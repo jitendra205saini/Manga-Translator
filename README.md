@@ -111,7 +111,7 @@ Press **Alt+O** to switch between the original and the Hindi page.
 |---|---|
 | Browser extension | JavaScript, Manifest V3 (Firefox 128+ / Chrome) |
 | Server | Python 3.13, FastAPI, Uvicorn |
-| OCR | Windows 11 built-in OCR (`winrt`) |
+| OCR | Windows 11 built-in OCR (`winrt`), `manga-ocr` ONNX for Japanese |
 | Bubble / text detection | `ogkalu/comic-text-and-bubble-detector` (RT-DETR-v2, ONNX Runtime + DirectML), OpenCV fallback |
 | Inpainting | LaMa (`Carve/LaMa-ONNX`), OpenCV fallback |
 | Translation | Google Gemini Flash-Lite, Groq (`openai/gpt-oss-120b`), Meta NLLB-200 600M (offline) |
@@ -130,6 +130,7 @@ manga-translator/
 │   ├── server.py              # FastAPI app (POST /translate, GET /health)
 │   ├── translator.py          # pipeline: OCR -> group -> bubbles -> translate -> render
 │   ├── ocr_windows.py         # Windows OCR wrapper
+│   ├── mangaocr.py            # manga-ocr (ONNX) for Japanese
 │   ├── render.py              # bubble detection, text erasing and Hindi typesetting
 │   ├── llm.py                 # Gemini / Groq prompts, fallback, character memory
 │   ├── nllb.py                # offline NLLB fallback
@@ -274,7 +275,8 @@ gender (`m` / `f` / `u`). The original and translated versions of the last 40 pa
 - [x] System tray app with one-click auto-update
 - [x] Re-ask for bubbles the AI left empty
 - [x] API key setup page (no key needed during install)
-- [ ] Better OCR: `manga-ocr` for Japanese, PaddleOCR for English / Korean / Chinese
+- [x] `manga-ocr` (ONNX, no PyTorch) for Japanese: vertical text, furigana, stylized fonts
+- [ ] PaddleOCR for Korean / Chinese
 - [ ] Signed Firefox add-on (permanent install)
 
 ## License

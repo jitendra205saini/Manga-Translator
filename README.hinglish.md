@@ -130,6 +130,7 @@ manga-translator/
 │   ├── server.py              # FastAPI app (POST /translate, GET /health)
 │   ├── translator.py          # pipeline: OCR -> group -> bubbles -> translate -> render
 │   ├── ocr_windows.py         # Windows OCR wrapper
+│   ├── mangaocr.py            # manga-ocr (ONNX) for Japanese
 │   ├── render.py              # bubble detection, text mitana aur Hindi likhna
 │   ├── llm.py                 # Gemini / Groq prompts, backup chain, character memory
 │   ├── nllb.py                # offline NLLB backup
@@ -273,7 +274,8 @@ Debug ke liye server log mein har page ki language, kaunsa provider chala aur ha
 - [x] System tray app, ek click auto-update
 - [x] AI ne jo bubble khaali chhoda use dobara puchna
 - [x] API key ka setup page (install ke waqt key nahi chahiye)
-- [ ] Behtar OCR: Japanese ke liye `manga-ocr`, English / Korean / Chinese ke liye PaddleOCR
+- [x] Japanese ke liye `manga-ocr` (ONNX, bina PyTorch): khada text, furigana, stylish font
+- [ ] Korean / Chinese ke liye PaddleOCR
 - [ ] Signed Firefox add-on (permanent install)
 
 ## License
