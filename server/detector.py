@@ -18,11 +18,15 @@ def available():
     return os.path.exists(MODEL_PATH)
 
 
+_cpu_only = False
+
+
 def _session():
     global _sess
     if _sess is None:
         import onnxruntime as ort
-        providers = [p for p in ("DmlExecutionProvider", "CPUExecutionProvider") if p in ort.get_available_providers()]
+        wanted = ("CPUExecutionProvider",) if _cpu_only else ("DmlExecutionProvider", "CPUExecutionProvider")
+        providers = [p for p in wanted if p in ort.get_available_providers()]
         try:
             _sess = ort.InferenceSession(MODEL_PATH, providers=providers)
         except Exception:
@@ -31,14 +35,30 @@ def _session():
     return _sess
 
 
+def _run(feed):
+    """GPU (DirectML) sleep / driver reset ke baad toot jaata hai ("GPU device instance has been suspended"):
+    tab session dobara banao; dobara bhi fail ho to CPU par chalo."""
+    global _sess, _cpu_only
+    for attempt in range(3):
+        try:
+            return _session().run(None, feed)
+        except Exception as e:
+            if attempt == 2:
+                raise
+            print(f"[detector] run fail ({str(e)[:80]}), session dobara bana rahe hain")
+            _sess = None
+            if attempt == 1:
+                _cpu_only = True
+
+
 def detect(img, threshold=0.3):
     """Return list of {"label", "box": (x0,y0,x1,y1), "score"} in original image pixels."""
     W, H = img.size
     x = np.asarray(img.convert("RGB").resize((SIZE, SIZE)), dtype=np.float32) / 255.0
     x = x.transpose(2, 0, 1)[None]
+    feed = {"images": x, "orig_target_sizes": np.array([[W, H]], dtype=np.int64)}
     with _lock:
-        labels, boxes, scores = _session().run(
-            None, {"images": x, "orig_target_sizes": np.array([[W, H]], dtype=np.int64)})
+        labels, boxes, scores = _run(feed)
     out = []
     for lab, box, sc in zip(labels[0], boxes[0], scores[0]):
         if sc < threshold or int(lab) not in LABELS:

@@ -18,11 +18,15 @@ def available():
     return all(os.path.exists(os.path.join(DIR, f)) for f in ("encoder_model.onnx", "decoder_model.onnx", "vocab.txt"))
 
 
+_cpu_only = False
+
+
 def _load():
     global _enc, _dec, _vocab
     if _enc is None:
         import onnxruntime as ort
-        prov = [p for p in ("DmlExecutionProvider", "CPUExecutionProvider") if p in ort.get_available_providers()]
+        wanted = ("CPUExecutionProvider",) if _cpu_only else ("DmlExecutionProvider", "CPUExecutionProvider")
+        prov = [p for p in wanted if p in ort.get_available_providers()]
         try:
             _enc = ort.InferenceSession(os.path.join(DIR, "encoder_model.onnx"), providers=prov)
             _dec = ort.InferenceSession(os.path.join(DIR, "decoder_model.onnx"), providers=prov)
@@ -50,7 +54,22 @@ def _clean(text):
 
 
 def read(crops, batch=8):
-    """crops: list of PIL images (ek bubble ka text har ek). Return list of str."""
+    """crops: list of PIL images (ek bubble ka text har ek). Return list of str.
+    GPU sleep / driver reset se toot jaye to session dobara (phir CPU) - detector jaisa."""
+    global _enc, _dec, _cpu_only
+    for attempt in range(3):
+        try:
+            return _read(crops, batch)
+        except Exception as e:
+            if attempt == 2:
+                raise
+            print(f"[manga-ocr] run fail ({str(e)[:80]}), session dobara bana rahe hain")
+            _enc = _dec = None
+            if attempt == 1:
+                _cpu_only = True
+
+
+def _read(crops, batch):
     if not crops:
         return []
     with _lock:
