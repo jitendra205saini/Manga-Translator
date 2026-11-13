@@ -13,3 +13,4 @@ requests
 opencv-python-headless
 onnxruntime-directml
 huggingface_hub
+pystray

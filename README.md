@@ -151,7 +151,8 @@ manga-translator/
 1. Download `MangaTranslator-Setup.exe` from the [Releases](https://github.com/jitendra205saini/Manga-Translator/releases) page and run it. No admin rights are needed.
 2. The installer downloads its own Python and the AI models (about 600 MB) into `%LOCALAPPDATA%\Programs\Manga Translator`. Nothing is installed system-wide.
 3. At the end, a page shows how to add the extension to Chrome, Edge or Firefox.
-4. The first time you start **Manga Translator**, a page opens where you paste a free Gemini (and optionally Groq) API key. You can change keys later from the extension popup.
+4. Manga Translator runs in the system tray (near the clock). Right-click the icon for status, API keys, restart, log and updates. It checks GitHub for a new version once a day and can update itself in one click.
+5. The first time you start **Manga Translator**, a page opens where you paste a free Gemini (and optionally Groq) API key. You can change keys later from the extension popup.
 
 To uninstall, use *Settings > Apps > Manga Translator > Uninstall*. The server is stopped and the whole install folder (Python, models, cache, keys) is removed; no pip or model cache is left elsewhere. Remove the browser extension from the browser itself.
 

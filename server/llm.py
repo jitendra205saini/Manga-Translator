@@ -334,7 +334,7 @@ def provider_status():
     return out
 
 
-def translate_pages(pages, lang, page_url="", fast=False):
+def translate_pages(pages, lang, page_url="", fast=False, _retry=False):
     """pages = [(img, groups), ...]. Return ([hindi_list per page], provider) ya None."""
     cfg = load_config()
     key = series_key(page_url)
@@ -375,6 +375,8 @@ def translate_pages(pages, lang, page_url="", fast=False):
             update_memory(key, data.get("characters"), pairs)
             genders = "".join(str(by_id.get(i, {}).get("gender", "u"))[:1] for i in range(1, total + 1))
             print(f"[{name}] {len(pages)} page(s), {total} bubbles, gender={genders}, {time.time() - t:.1f}s")
+            if not _retry:
+                hindi = _reask_missing(pages, all_groups, hindi, lang, page_url, fast)
             out, k = [], 0
             for _, gs in pages:
                 out.append(hindi[k:k + len(gs)])
@@ -388,6 +390,38 @@ def translate_pages(pages, lang, page_url="", fast=False):
         except Exception as e:
             print(f"[{name}] fail: {e}")
     return None
+
+
+def _has_words(text):
+    return len(re.findall(r"[^\W\d_]", str(text or ""))) >= 2
+
+
+def _reask_missing(pages, all_groups, hindi, lang, page_url, fast):
+    """Jin bubbles mein asli shabd the par jawab khaali / "..." aaya, sirf unhe ek baar dobara puchho."""
+    miss = [i for i, (g, h) in enumerate(zip(all_groups, hindi)) if _has_words(g.get("text")) and not h]
+    if not miss:
+        return hindi
+    sub, idx, k = [], [], 0
+    for im, gs in pages:
+        mine = [i for i in miss if k <= i < k + len(gs)]
+        if mine:
+            sub.append((im, [all_groups[i] for i in mine]))
+            idx.extend(mine)
+        k += len(gs)
+    print(f"[reask] {len(idx)} khaali bubble(s) dobara")
+    try:
+        res = translate_pages(sub, lang, page_url, fast, _retry=True)
+    except Exception as e:
+        print("[reask] fail:", e)
+        return hindi
+    if not res:
+        return hindi
+    flat = [h for part in res[0] for h in part]
+    hindi = list(hindi)
+    for i, h in zip(idx, flat):
+        if h:
+            hindi[i] = h
+    return hindi
 
 
 # ---------- batching: thodi der ruk kar aas-paas ke pages ek hi request mein ----------

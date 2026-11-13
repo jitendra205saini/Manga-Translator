@@ -570,6 +570,12 @@ def erase_ml(img, groups):
                     full = np.zeros((H, W), np.uint8)
                     full[ebox[1]:ebox[3], ebox[0]:ebox[2]] = m
                     inpaint.inpaint_region(arr, full, ebox)
+                    # doosra pass: pehli baar ke baad bhi letter ke tukde bache hon to sirf wahi dobara
+                    left = inpaint.letter_mask(arr, ebox, grow=3)
+                    if left is not None and (left & m).sum() > 0.08 * max(1, m.sum()):
+                        full[:] = 0
+                        full[ebox[1]:ebox[3], ebox[0]:ebox[2]] = left & cv2.dilate(m, np.ones((5, 5), np.uint8))
+                        inpaint.inpaint_region(arr, full, ebox)
                     bg = bg_color(arr, ebox, pad=2)
             plans.append(("box", ebox, None, 0, 0, bg, g["thickness"]))
     return orig, arr, plans

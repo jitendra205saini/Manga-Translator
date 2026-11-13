@@ -1,6 +1,6 @@
 ; Inno Setup script. Build: installer\build.bat  ->  installer\Output\MangaTranslator-Setup.exe
 #define AppName "Manga Translator"
-#define AppVersion "2.2.0"
+#define AppVersion "2.3.0"
 #define Root ".."
 
 [Setup]
@@ -29,7 +29,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"
-Name: "autostart"; Description: "Start the translator server automatically when Windows starts (recommended)"
+Name: "autostart"; Description: "Start Manga Translator automatically when Windows starts (recommended)"
 
 [Files]
 Source: "{#Root}\server\*"; DestDir: "{app}\server"; Flags: recursesubdirs ignoreversion; \
@@ -41,23 +41,30 @@ Source: "{#Root}\installer\browser.html"; DestDir: "{app}\installer"; Flags: ign
 Source: "{#Root}\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Root}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 
+[InstallDelete]
+; purane version ka startup shortcut (sirf server chalata tha)
+Type: files; Name: "{userstartup}\Manga Translator server.lnk"
+
 [Icons]
-Name: "{group}\{#AppName}"; Filename: "{app}\python\pythonw.exe"; Parameters: """{app}\server\launch.py"""; \
+Name: "{group}\{#AppName}"; Filename: "{app}\python\pythonw.exe"; Parameters: """{app}\server\tray.py"""; \
   WorkingDir: "{app}\server"; IconFilename: "{app}\extension\icons\icon.ico"
 Name: "{group}\API keys"; Filename: "http://127.0.0.1:7860/setup"; IconFilename: "{app}\extension\icons\icon.ico"
 Name: "{group}\Add extension to browser"; Filename: "{app}\installer\browser.html"
 Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
-Name: "{userdesktop}\{#AppName}"; Filename: "{app}\python\pythonw.exe"; Parameters: """{app}\server\launch.py"""; \
+Name: "{userdesktop}\{#AppName}"; Filename: "{app}\python\pythonw.exe"; Parameters: """{app}\server\tray.py"""; \
   WorkingDir: "{app}\server"; IconFilename: "{app}\extension\icons\icon.ico"; Tasks: desktopicon
-Name: "{userstartup}\{#AppName} server"; Filename: "{app}\python\pythonw.exe"; Parameters: """{app}\server\run.py"""; \
-  WorkingDir: "{app}\server"; Tasks: autostart
+Name: "{userstartup}\{#AppName}"; Filename: "{app}\python\pythonw.exe"; Parameters: """{app}\server\tray.py"" --quiet"; \
+  WorkingDir: "{app}\server"; IconFilename: "{app}\extension\icons\icon.ico"; Tasks: autostart
 
 [Run]
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\installer\install.ps1"" -AppDir ""{app}"""; \
   StatusMsg: "Downloading Python and AI models (about 600 MB, a few minutes)..."; Flags: waituntilterminated runhidden
 Filename: "{app}\installer\browser.html"; Description: "Add the extension to my browser"; Flags: postinstall shellexec skipifsilent
-Filename: "{app}\python\pythonw.exe"; Parameters: """{app}\server\launch.py"""; WorkingDir: "{app}\server"; \
+Filename: "{app}\python\pythonw.exe"; Parameters: """{app}\server\tray.py"""; WorkingDir: "{app}\server"; \
   Description: "Start Manga Translator now"; Flags: postinstall nowait skipifsilent
+; auto-update (silent install) ke baad tray khud dobara chalu
+Filename: "{app}\python\pythonw.exe"; Parameters: """{app}\server\tray.py"" --quiet"; WorkingDir: "{app}\server"; \
+  Flags: nowait; Check: WizardSilent
 
 [UninstallRun]
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\installer\stop.ps1"""; \
