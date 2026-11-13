@@ -36,19 +36,17 @@ def _session():
 
 
 def _run(feed):
-    """GPU (DirectML) sleep / driver reset ke baad toot jaata hai ("GPU device instance has been suspended"):
-    tab session dobara banao; dobara bhi fail ho to CPU par chalo."""
+    """GPU (DirectML) sleep / driver update ke baad toot jaata hai ("GPU device instance has been suspended").
+    Usi process mein GPU session dobara banana atak jaata hai, isliye seedha CPU. (Tray server restart kare to GPU wapas.)"""
     global _sess, _cpu_only
-    for attempt in range(3):
-        try:
-            return _session().run(None, feed)
-        except Exception as e:
-            if attempt == 2:
-                raise
-            print(f"[detector] run fail ({str(e)[:80]}), session dobara bana rahe hain")
-            _sess = None
-            if attempt == 1:
-                _cpu_only = True
+    try:
+        return _session().run(None, feed)
+    except Exception as e:
+        if _cpu_only:
+            raise
+        print(f"[detector] GPU fail ({str(e)[:80]}), ab CPU par")
+        _sess, _cpu_only = None, True
+        return _session().run(None, feed)
 
 
 def detect(img, threshold=0.3):

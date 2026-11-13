@@ -14,8 +14,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
+import detector
 import llm
-import nllb
+import mangaocr
 import translator
 
 
@@ -24,19 +25,19 @@ async def lifespan(app):
     # NLLB sirf backup hai: startup par load nahi, zaroorat padne par hoga
     # detector + LaMa pehle se load: pehla page intezaar na kare
     def warm():
-        import detector, inpaint
+        import inpaint
         try:
             # sirf load nahi, ek dummy run bhi: GPU/CPU ka pehla run dheema hota hai (~15s), page ka nahi
             import numpy as np
             from PIL import Image
             if detector.available():
                 detector.detect(Image.new("RGB", (800, 1100), "white"))
-            import mangaocr
             if mangaocr.available():
                 mangaocr.read([Image.new("RGB", (60, 200), "white")])
             if inpaint.available():
                 arr = np.full((200, 200, 3), 255, np.uint8)
-                m = np.zeros((200, 200), np.uint8); m[80:120, 80:120] = 1
+                m = np.zeros((200, 200), np.uint8)
+                m[80:120, 80:120] = 1
                 inpaint.inpaint_region(arr, m, (80, 80, 120, 120))
         except Exception as e:
             print("[server] warm-up fail:", e)
@@ -82,7 +83,8 @@ def download_image(url, referer):
 
 @app.get("/health")
 async def health():
-    return {"ok": True, "device": nllb.DEVICE, "providers": llm.provider_status(), "usage": llm.usage_today()}
+    gpu_lost = detector._cpu_only or mangaocr._cpu_only  # GPU toota, CPU par chal raha: tray restart karega
+    return {"ok": True, "gpu_lost": gpu_lost, "providers": llm.provider_status(), "usage": llm.usage_today()}
 
 
 HERE = os.path.dirname(os.path.abspath(__file__))

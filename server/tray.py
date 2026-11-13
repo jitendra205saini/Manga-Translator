@@ -127,11 +127,26 @@ def do_update(icon, item):
 def watcher(icon):
     start_server()
     last_update_check = 0
+    down_since = None
+    last_restart = 0
     while True:
         h = health()
         if not h:
-            st = "Starting..." if state["proc"] and state["proc"].poll() is None else "Server stopped"
+            down_since = down_since or time.time()
+            alive = state["proc"] and state["proc"].poll() is None
+            st = "Starting..." if alive else "Server stopped"
+            # band ho gaya, ya 90s se jawab nahi: dobara chalao
+            if (not alive or time.time() - down_since > 90) and time.time() - last_restart > 60:
+                last_restart = time.time()
+                threading.Thread(target=restart, daemon=True).start()
+                down_since = None
         else:
+            down_since = None
+            # GPU sleep / driver update se toota: naya process GPU wapas le aata hai (10 min mein ek baar)
+            if h.get("gpu_lost") and time.time() - last_restart > 600:
+                last_restart = time.time()
+                threading.Thread(target=restart, daemon=True).start()
+        if h:
             p = h.get("providers", {})
             ai = {k: v for k, v in p.items() if k in ("gemini", "groq")}
             if not any(v == "ready" or str(v).startswith("limit") for v in ai.values()):

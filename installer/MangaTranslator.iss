@@ -1,6 +1,6 @@
 ; Inno Setup script. Build: installer\build.bat  ->  installer\Output\MangaTranslator-Setup.exe
 #define AppName "Manga Translator"
-#define AppVersion "2.5.2"
+#define AppVersion "2.5.4"
 #define Root ".."
 
 [Setup]

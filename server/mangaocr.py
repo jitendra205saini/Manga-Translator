@@ -55,18 +55,17 @@ def _clean(text):
 
 def read(crops, batch=8):
     """crops: list of PIL images (ek bubble ka text har ek). Return list of str.
-    GPU sleep / driver reset se toot jaye to session dobara (phir CPU) - detector jaisa."""
+    GPU sleep / driver update se toot jaye to CPU par (detector jaisa)."""
     global _enc, _dec, _cpu_only
-    for attempt in range(3):
-        try:
-            return _read(crops, batch)
-        except Exception as e:
-            if attempt == 2:
-                raise
-            print(f"[manga-ocr] run fail ({str(e)[:80]}), session dobara bana rahe hain")
-            _enc = _dec = None
-            if attempt == 1:
-                _cpu_only = True
+    try:
+        return _read(crops, batch)
+    except Exception as e:
+        if _cpu_only:
+            raise
+        print(f"[manga-ocr] GPU fail ({str(e)[:80]}), ab CPU par")
+        _enc = _dec = None
+        _cpu_only = True
+        return _read(crops, batch)
 
 
 def _read(crops, batch):

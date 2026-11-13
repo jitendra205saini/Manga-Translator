@@ -250,6 +250,7 @@ def _check(r, name):
         raise RuntimeError(f"{name}: HTTP {r.status_code} {r.text[:300]}")
 
 
+GEMINI_BUDGET = 40
 _gemini_dead = set()
 _gemini_good = None
 
@@ -265,15 +266,23 @@ def call_gemini(cfg, prompt, img_b64):
     if _gemini_good in models:
         models = [_gemini_good] + [m for m in models if m != _gemini_good]
     last = None
+    # Gemini dheema ho to poora page na atke: kul 40s, phir Groq (extension 90s mein haar maanta hai)
+    deadline = time.time() + GEMINI_BUDGET
     for model in models:
         for _ in range(2):
-            r = requests.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-                headers={"x-goog-api-key": c["api_key"], "Content-Type": "application/json"},
-                json={"contents": [{"role": "user", "parts": parts}],
-                      "generationConfig": {"temperature": 0.5, "responseMimeType": "application/json"}},
-                timeout=90,
-            )
+            left = deadline - time.time()
+            if left < 5:
+                raise RuntimeError(f"gemini: {GEMINI_BUDGET}s mein jawab nahi ({last or 'timeout'})")
+            try:
+                r = requests.post(
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                    headers={"x-goog-api-key": c["api_key"], "Content-Type": "application/json"},
+                    json={"contents": [{"role": "user", "parts": parts}],
+                          "generationConfig": {"temperature": 0.5, "responseMimeType": "application/json"}},
+                    timeout=(10, left),
+                )
+            except requests.Timeout:
+                raise RuntimeError(f"gemini: {model} {GEMINI_BUDGET}s mein jawab nahi")
             if r.status_code in (500, 503):  # bheed: thoda ruko, phir agla model
                 last = f"{model}: HTTP {r.status_code}"
                 time.sleep(1)
@@ -322,7 +331,7 @@ def call_groq(cfg, prompt, img_b64, prompt_txt=None):
             json={"model": model, "temperature": 0.5,
                   "response_format": {"type": "json_object"},
                   "messages": [{"role": "user", "content": content}]},
-            timeout=90,
+            timeout=(10, 40),
         )
         if r.status_code == 429:
             last, limited = f"{model}: limit", True
@@ -393,6 +402,11 @@ def translate_pages(pages, lang, page_url="", fast=False, _retry=False):
                    else PROVIDERS[name](cfg, prompt, imgs))
             data = _parse_json(raw)
             by_id = {int(l["id"]): l for l in data.get("lines", []) if "id" in l}
+            if name == "groq" and imgs and not any(str(l.get("hi") or "").strip() for l in by_id.values()):
+                # Groq ke image model ne khaali diya: sirf text wala prompt (gpt-oss) try karo
+                print("[groq] image model khaali, text model try")
+                data = _parse_json(PROVIDERS[name](cfg, prompt_txt, None, prompt_txt))
+                by_id = {int(l["id"]): l for l in data.get("lines", []) if "id" in l}
             hindi = [clean_hi(by_id.get(i, {}).get("hi", "")) for i in range(1, total + 1)]
             # SFX ka nishaan: render isse bada comic style mein likhta hai
             hindi = [SFX_MARK + h if h and by_id.get(i, {}).get("sfx") is True else h
