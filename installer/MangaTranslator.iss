@@ -1,6 +1,6 @@
 ; Inno Setup script. Build: installer\build.bat  ->  installer\Output\MangaTranslator-Setup.exe
 #define AppName "Manga Translator"
-#define AppVersion "2.4.0"
+#define AppVersion "2.5.0"
 #define Root ".."
 
 [Setup]
@@ -33,7 +33,7 @@ Name: "autostart"; Description: "Start Manga Translator automatically when Windo
 
 [Files]
 Source: "{#Root}\server\*"; DestDir: "{app}\server"; Flags: recursesubdirs ignoreversion; \
-  Excludes: "models,cache,debug,bin,fonts\*.ttf,__pycache__,config.json,memory.json,*.log"
+  Excludes: "models,cache,debug,bin,fonts\*.ttf,__pycache__,config.json,memory.json,usage.json,*.log"
 Source: "{#Root}\extension\*"; DestDir: "{app}\extension"; Flags: recursesubdirs ignoreversion
 Source: "{#Root}\installer\install.ps1"; DestDir: "{app}\installer"; Flags: ignoreversion
 Source: "{#Root}\installer\stop.ps1"; DestDir: "{app}\installer"; Flags: ignoreversion

@@ -18,19 +18,19 @@ HAS_RAQM = features.check("raqm")
 _fonts = {}
 
 
-def get_font(size):
+def get_font(size, weight=b"SemiBold"):
     if FONT_PATH is None:
         raise RuntimeError("Devanagari font nahi mila. server/fonts mein NotoSansDevanagari-Regular.ttf rakho.")
-    font = _fonts.get(size)
+    font = _fonts.get((size, weight))
     if font is None:
         layout = ImageFont.Layout.RAQM if HAS_RAQM else ImageFont.Layout.BASIC
         font = ImageFont.truetype(FONT_PATH, size, layout_engine=layout)
         try:
-            if b"SemiBold" in font.get_variation_names():
-                font.set_variation_by_name("SemiBold")
+            if weight in font.get_variation_names():
+                font.set_variation_by_name(weight)
         except Exception:
             pass  # variable font nahi
-        _fonts[size] = font
+        _fonts[(size, weight)] = font
     return font
 
 
@@ -105,6 +105,50 @@ def draw_in_box(draw, text, box, fg, bg, thickness):
         draw.text((cx, y + lh / 2), line, font=font, fill=fg, anchor="mm",
                   stroke_width=stroke, stroke_fill=bg)
         y += lh
+
+
+def is_sfx(text):
+    """AI ne SFX bataya (\x01 nishaan) aur chhota hai: bubble ke bahar ho to bada comic style."""
+    t = text.lstrip("\x01").strip()
+    return text.startswith("\x01") and 0 < len(t) <= 16
+
+
+def draw_sfx(draw, text, box):
+    """SFX: box jitna bada, mota (ExtraBold), kaala text + moti safed outline, jaise comic SFX."""
+    x0, y0, x1, y1 = box
+    bw, bh = max(1, x1 - x0), max(1, y1 - y0)
+    # khada (vertical) SFX box: Hindi seedhi likhte hain, isliye box ki chaudai se thoda bahar ja sakte hain
+    # SFX art ke upar hota hai: box se thoda (30%) bahar jaana theek, chhota padhne layak na rahe wo bura
+    bw_eff = max(int(bw * 1.3), int(bh * 0.9)) if bh > 1.6 * bw else int(bw * 1.3)
+    size = int(min(bh * 0.85, 110))
+    while size > 14:
+        font = get_font(size, b"ExtraBold")
+        if draw.textlength(text, font=font) <= bw_eff * 0.95:
+            break
+        size -= 2
+    font = get_font(size, b"ExtraBold")
+    stroke = max(2, size // 7)
+    # page ke kinare se bahar na jaye
+    W, H = draw.im.size
+    half = draw.textlength(text, font=font) / 2 + stroke + 2
+    cx = min(max((x0 + x1) / 2, half), W - half)
+    cy = min(max((y0 + y1) / 2, size * 0.6), H - size * 0.6)
+    draw.text((cx, cy), text, font=font, fill=(0, 0, 0), anchor="mm",
+              stroke_width=stroke, stroke_fill=(255, 255, 255))
+
+
+def line_mask(arr, box):
+    """Box ke andar lambi seedhi lines (panel border, frame): inhe mitana nahi hai."""
+    x0, y0, x1, y1 = box
+    region = arr[y0:y1, x0:x1]
+    if region.size == 0:
+        return None
+    gray = cv2.cvtColor(region, cv2.COLOR_RGB2GRAY)
+    dark = (gray < 110).astype(np.uint8)
+    h, w = dark.shape
+    hor = cv2.morphologyEx(dark, cv2.MORPH_OPEN, np.ones((1, max(15, int(w * 0.6))), np.uint8))
+    ver = cv2.morphologyEx(dark, cv2.MORPH_OPEN, np.ones((max(15, int(h * 0.6)), 1), np.uint8))
+    return cv2.dilate(hor | ver, np.ones((3, 3), np.uint8), iterations=1)
 
 
 def find_bubble(gray, box):
@@ -558,6 +602,9 @@ def erase_ml(img, groups):
             flat = _is_flat(arr, g["box"])
             if flat:
                 m = inpaint.text_mask(arr, ebox, grow=4)
+                lines = line_mask(arr, ebox)
+                if m is not None and lines is not None:
+                    m = m & (1 - lines)  # panel ki border mat mitao
             else:
                 # art par: letters + unki safed outline, thoda zyada phailao taaki nishaan na bache
                 lm = inpaint.letter_mask(arr, ebox, grow=5)
@@ -594,13 +641,17 @@ def render_ml(img, groups, texts, pre=None):
     out = Image.fromarray(arr)
     draw = ImageDraw.Draw(out)
     for (kind, ebox, mask, ox, oy, bg, thick), text in zip(plans, texts):
-        text = (text or "").strip()
+        sfx = is_sfx(text or "")
+        text = (text or "").replace("\x01", "").strip()
         if not text:
             continue
         fg = (0, 0, 0) if luminance(bg) > 128 else (255, 255, 255)
         if kind == "mask":
             draw_in_mask(draw, text, mask, ox, oy, fg, bg, thick)
         else:
-            sbg = (255, 255, 255) if fg == (0, 0, 0) else (0, 0, 0)
-            draw_in_box(draw, text, ebox, fg, sbg, thick)
+            if sfx:
+                draw_sfx(draw, text, ebox)
+            else:
+                sbg = (255, 255, 255) if fg == (0, 0, 0) else (0, 0, 0)
+                draw_in_box(draw, text, ebox, fg, sbg, thick)
     return out

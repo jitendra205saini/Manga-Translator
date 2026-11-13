@@ -59,11 +59,17 @@ const $ = (id) => document.getElementById(id);
   // server status
   try {
     const r = await (await fetch("http://127.0.0.1:7860/health")).json();
-    const lines = Object.entries(r.providers || {}).map(([p, s]) =>
+    const lines = Object.entries(r.providers || {}).filter(([, s]) => s !== "not installed").map(([p, s]) =>
       `<div>${p}: <span class="${s === "ready" ? "ok" : "bad"}">${s}</span></div>`);
     const p = r.providers || {};
     const noKey = !(p.gemini === "ready" || p.groq === "ready" || String(p.gemini || "").startsWith("limit") || String(p.groq || "").startsWith("limit"));
-    $("status").innerHTML = `<div class="ok">Server running (${r.device})</div>` + lines.join("") +
+    const u = r.usage || {};
+    const gUsed = u.gemini || 0, gLim = u.gemini_limit || 500;
+    const usage = `<div class="usage"><b>Today</b>: ${u.pages || 0} pages translated` +
+      (u.cached ? `, ${u.cached} from cache` : "") +
+      `<br>Gemini: ${gUsed} of ~${gLim} requests (${Math.max(0, gLim - gUsed)} left)` +
+      (u.groq ? `<br>Groq: ${u.groq} requests` : "") + `</div>`;
+    $("status").innerHTML = `<div class="ok">Server running</div>` + lines.join("") + usage +
       `<div><a href="#" id="keys">${noKey ? "<b>Add API key (required)</b>" : "Change API keys"}</a></div>`;
     $("keys").onclick = (e) => { e.preventDefault(); chrome.tabs.create({ url: "http://127.0.0.1:7860/setup" }); };
   } catch (e) {

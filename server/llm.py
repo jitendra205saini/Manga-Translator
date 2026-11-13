@@ -148,11 +148,13 @@ Rules:
   But short exclamations, interjections and SFX inside the story (YIKES, ALSO!, UM..., OH.) MUST be translated, never "".
 - For shouting, do not repeat matras or letters; use "!!!" instead (e.g. "कल है!!!").
 - Fix obvious OCR mistakes using context. If a bubble/box has no real text (just art, noise, watermark), return "" for it.
-- Sound effects (SFX): give a short Hindi equivalent (e.g. "धड़ाम!", "हम्म...") or "" if meaningless.
+- Sound effects (SFX): give a short Hindi sound word (onomatopoeia), 1-2 words, like "धड़ाम!", "फड़फड़!", "थप!",
+  "धक-धक", "सर्र!", "खट!" - never a verb or description ("फड़फड़ाना", "चलना" are wrong). Return "" if meaningless.
+  Set "sfx": true for them. Dialogue, narration and captions are NOT sfx.
 
 {extra_rule}
 Return ONLY JSON:
-{{"lines": [{{"id": 1, "gender": "m|f|u", "speaker": "name or empty", "hi": "Hindi text"}}],
+{{"lines": [{{"id": 1, "gender": "m|f|u", "speaker": "name or empty", "hi": "Hindi text", "sfx": false}}],
   "extra": [{{"box_2d": [ymin, xmin, ymax, xmax], "text": "original", "hi": "Hindi"}}],
   "characters": {{"Name": "m|f"}}}}
 Include every id exactly once."""
@@ -175,6 +177,46 @@ def mark_bubbles(img, groups, start=1):
         d.rectangle([tx, ty, tx + size * (0.7 * len(str(i)) + 0.3), ty + size * 1.1], fill=(255, 0, 0))
         d.text((tx + size * 0.15, ty), str(i), font=font, fill=(255, 255, 255))
     return im
+
+
+SFX_MARK = "\x01"
+
+# ---------- aaj ka hisaab (popup mein dikhta hai) ----------
+USAGE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "usage.json")
+_usage_lock = threading.Lock()
+_usage = None
+
+
+def _today():
+    return time.strftime("%Y-%m-%d")
+
+
+def usage_bump(key, n=1):
+    global _usage
+    with _usage_lock:
+        if _usage is None:
+            try:
+                with open(USAGE_PATH, encoding="utf-8") as f:
+                    _usage = json.load(f)
+            except Exception:
+                _usage = {}
+        if _usage.get("date") != _today():
+            _usage = {"date": _today()}
+        if n:
+            _usage[key] = _usage.get(key, 0) + n
+            try:
+                with open(USAGE_PATH, "w", encoding="utf-8") as f:
+                    json.dump(_usage, f)
+            except Exception:
+                pass
+
+
+def usage_today():
+    usage_bump("_", 0)
+    cfg = load_config()
+    out = dict(_usage)
+    out["gemini_limit"] = int(cfg["gemini"].get("daily_limit", 500))
+    return out
 
 
 def clean_hi(text):
@@ -368,10 +410,14 @@ def translate_pages(pages, lang, page_url="", fast=False, _retry=False):
             data = _parse_json(raw)
             by_id = {int(l["id"]): l for l in data.get("lines", []) if "id" in l}
             hindi = [clean_hi(by_id.get(i, {}).get("hi", "")) for i in range(1, total + 1)]
+            # SFX ka nishaan: render isse bada comic style mein likhta hai
+            hindi = [SFX_MARK + h if h and by_id.get(i, {}).get("sfx") is True else h
+                     for i, h in zip(range(1, total + 1), hindi)]
             if not any(hindi):
                 raise RuntimeError("koi translation nahi aayi")
             _strikes[name] = 0
-            pairs = [[g["text"], h] for g, h in zip(all_groups, hindi) if h and g["text"]][-8:]
+            usage_bump(name)
+            pairs = [[g["text"], h.lstrip(SFX_MARK)] for g, h in zip(all_groups, hindi) if h and g["text"]][-8:]
             update_memory(key, data.get("characters"), pairs)
             genders = "".join(str(by_id.get(i, {}).get("gender", "u"))[:1] for i in range(1, total + 1))
             print(f"[{name}] {len(pages)} page(s), {total} bubbles, gender={genders}, {time.time() - t:.1f}s")

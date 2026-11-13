@@ -73,7 +73,7 @@ def download_image(url, referer):
 
 @app.get("/health")
 async def health():
-    return {"ok": True, "device": nllb.DEVICE, "providers": llm.provider_status()}
+    return {"ok": True, "device": nllb.DEVICE, "providers": llm.provider_status(), "usage": llm.usage_today()}
 
 
 HERE = os.path.dirname(os.path.abspath(__file__))

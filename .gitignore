@@ -12,3 +12,4 @@ server/cache/
 *.log
 installer/Output/
 python/
+usage.json

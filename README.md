@@ -275,6 +275,8 @@ gender (`m` / `f` / `u`). The original and translated versions of the last 40 pa
 - [x] System tray app with one-click auto-update
 - [x] Re-ask for bubbles the AI left empty
 - [x] API key setup page (no key needed during install)
+- [x] Sound effects in bold comic style (धड़ाम!, थप!)
+- [x] Today's usage and Gemini quota in the popup
 - [x] `manga-ocr` (ONNX, no PyTorch) for Japanese: vertical text, furigana, stylized fonts
 - [ ] PaddleOCR for Korean / Chinese
 - [ ] Signed Firefox add-on (permanent install)

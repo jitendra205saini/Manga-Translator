@@ -274,6 +274,8 @@ Debug ke liye server log mein har page ki language, kaunsa provider chala aur ha
 - [x] System tray app, ek click auto-update
 - [x] AI ne jo bubble khaali chhoda use dobara puchna
 - [x] API key ka setup page (install ke waqt key nahi chahiye)
+- [x] Sound effects mote comic style mein (धड़ाम!, थप!)
+- [x] Popup mein aaj ka hisaab aur Gemini quota
 - [x] Japanese ke liye `manga-ocr` (ONNX, bina PyTorch): khada text, furigana, stylish font
 - [ ] Korean / Chinese ke liye PaddleOCR
 - [ ] Signed Firefox add-on (permanent install)

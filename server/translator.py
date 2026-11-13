@@ -290,11 +290,13 @@ async def translate_page(raw, lang_choice="Auto", page_url="", fast=False):
     key = hashlib.md5(raw).hexdigest() + "_" + lang_choice + "_" + CACHE_VERSION
     if key in _cache:
         _cache.move_to_end(key)
+        llm.usage_bump("cached")
         return _cache[key]
     disk = _disk_get(key)
     if disk:
         print(f"[cache] disk se mila ({disk.get('bubbles')} bubbles)")
         _cache[key] = disk
+        llm.usage_bump("cached")
         return disk
 
     t0 = time.time()
@@ -372,7 +374,7 @@ async def translate_page(raw, lang_choice="Auto", page_url="", fast=False):
         if use_ml:
             out = await asyncio.to_thread(render_ml, img, groups, hindi, pre)
         else:
-            out = await asyncio.to_thread(render_translations, img, groups, hindi)
+            out = await asyncio.to_thread(render_translations, img, groups, [h.replace("\x01", "") for h in hindi])
         save_debug(img, out)
         buf = io.BytesIO()
         out.save(buf, format="PNG", compress_level=1)
@@ -386,6 +388,8 @@ async def translate_page(raw, lang_choice="Auto", page_url="", fast=False):
         _cache[key] = result
         if result.get("image"):
             await asyncio.to_thread(_disk_put, key, result)
+    if result.get("image"):
+        llm.usage_bump("pages")
     if len(_cache) > MAX_CACHE:
         _cache.popitem(last=False)
     return result
