@@ -99,7 +99,8 @@ def get_models():
             print(f"[models] {repo}/{name} download ho raha hai...")
             hf_hub_download(repo, name, local_dir=os.path.join(HERE, "models", folder), token=False)
         except Exception as e:
-            print(f"[models] {name} fail ({e}). Purana OpenCV tarika chalega.")
+            print(f"[models] {name} fail ({e}). Internet check karke dobara chalao.")
+            raise SystemExit(1)
 
 
 def get_comic_font():

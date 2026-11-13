@@ -135,7 +135,7 @@ async function postServer(body) {
       body: JSON.stringify(body),
     });
   } catch (e) {
-    return { error: "Cannot reach the local server. Run START_SERVER.bat.", retry: true };
+    return { error: "Cannot reach the local server. Open 'Manga Translator' from the Start menu.", retry: true };
   }
   return await res.json();
 }

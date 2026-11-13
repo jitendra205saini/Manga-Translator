@@ -4,6 +4,7 @@
 
   const MIN_W = 400;
   const MIN_H = 300;
+  const AHEAD = 4000;          // screen se itne px aage tak ke pages pehle se translate
   let on = false;
   let seen = new WeakSet();   // har image sirf ek baar
   const originals = new Map(); // OFF par wapas lagane ke liye
@@ -87,9 +88,10 @@
         msg.rect = fullRect(img);
       }
       const res = await chrome.runtime.sendMessage(msg);
-      if (!on) return;
+      // OFF ho gaya, ya timeout ke baad dobara bheja hua page pehle hi lag gaya: purana jawab mat lagao
+      if (!on || img.dataset.mtDone) return;
       if (res && res.image) {
-        originals.set(img, { src: img.src, srcset: img.getAttribute("srcset") });
+        originals.set(img, { src, srcset: img.getAttribute("srcset") });
         img.removeAttribute("srcset");
         const pic = img.closest("picture");
         if (pic) pic.querySelectorAll("source").forEach((s) => {
@@ -131,7 +133,7 @@
   function scan() {
     document.querySelectorAll("img").forEach((img) => {
       const r = img.getBoundingClientRect();
-      if (r.bottom > -1500 && r.top < innerHeight + 1500) enqueue(img);
+      if (r.bottom > -AHEAD && r.top < innerHeight + AHEAD) enqueue(img);
     });
   }
 
@@ -149,7 +151,7 @@
         if (img.complete && img.naturalWidth) enqueue(img);
         else img.addEventListener("load", () => enqueue(img), { once: true });
       }
-    }, { threshold: [0, 0.5, 1], rootMargin: "4000px 0px" });  // aage ke ~3-4 pages pehle se translate
+    }, { threshold: [0, 0.5, 1], rootMargin: `${AHEAD}px 0px` });
     document.querySelectorAll("img").forEach(watch);
 
     // infinite scroll / naye pages

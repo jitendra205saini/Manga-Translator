@@ -84,10 +84,8 @@ def update_memory(key, characters, recent_pairs):
 
 
 # ---------- prompt ----------
-def build_prompt(groups, lang, img_size, memory, with_image, pages=None):
+def build_prompt(pages, lang, memory, with_image):
     """pages = [(img_size, groups), ...] ek saath kai pages; ids poore batch mein lagataar."""
-    if pages is None:
-        pages = [(img_size, groups)]
     bubbles = []
     i = 0
     for pno, (size, gs) in enumerate(pages, 1):
@@ -116,11 +114,6 @@ def build_prompt(groups, lang, img_size, memory, with_image, pages=None):
             "No image is given; infer the speaker's gender from speech style "
             "(e.g. Japanese あたし/わ/のよ/かしら = female, 俺/僕/ぜ/だぞ = male), names and context.")
 
-    with_extra = False
-    extra_rule = ("- OCR misses some bubbles. Look at the image: for every speech bubble / narration box / important text that is NOT "
-                  "covered by the boxes above, add it to \"extra\" with box_2d = [ymin, xmin, ymax, xmax] normalized 0-1000 covering the whole text. "
-                  "Ignore watermarks, site names and page numbers. Use [] if nothing is missing."
-                  if with_extra else "- Set \"extra\" to [].")
     return f"""You translate {LANG_NAMES.get(lang, lang)} manga/manhwa/comic dialogue into natural, casual spoken Hindi.
 
 Text bubbles (OCR output, may contain small OCR mistakes; box = [x0,y0,x1,y1] on a 0-1000 scale):
@@ -152,10 +145,8 @@ Rules:
   "धक-धक", "सर्र!", "खट!" - never a verb or description ("फड़फड़ाना", "चलना" are wrong). Return "" if meaningless.
   Set "sfx": true for them. Dialogue, narration and captions are NOT sfx.
 
-{extra_rule}
 Return ONLY JSON:
 {{"lines": [{{"id": 1, "gender": "m|f|u", "speaker": "name or empty", "hi": "Hindi text", "sfx": false}}],
-  "extra": [{{"box_2d": [ymin, xmin, ymax, xmax], "text": "original", "hi": "Hindi"}}],
   "characters": {{"Name": "m|f"}}}}
 Include every id exactly once."""
 
@@ -171,7 +162,7 @@ def mark_bubbles(img, groups, start=1):
     except OSError:
         font = ImageFont.load_default()
     for i, g in enumerate(groups, start):
-        x0, y0, x1, y1 = g["box"] if "kind" in g else (g["bubble"][3] if "bubble" in g else g["box"])
+        x0, y0, x1, y1 = g["box"]
         d.rectangle([x0, y0, x1, y1], outline=(255, 0, 0), width=max(2, size // 8))
         tx, ty = x0 + 2, max(0, y0 - size // 3)
         d.rectangle([tx, ty, tx + size * (0.7 * len(str(i)) + 0.3), ty + size * 1.1], fill=(255, 0, 0))
@@ -275,7 +266,7 @@ def call_gemini(cfg, prompt, img_b64):
         models = [_gemini_good] + [m for m in models if m != _gemini_good]
     last = None
     for model in models:
-        for attempt in range(2):
+        for _ in range(2):
             r = requests.post(
                 f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
                 headers={"x-goog-api-key": c["api_key"], "Content-Type": "application/json"},
@@ -353,13 +344,6 @@ _cooldown = {}   # provider -> time.time() tak band
 _strikes = {}    # lagatar 429 ki ginti
 
 
-def _overlap(a, b):
-    ix = max(0, min(a[2], b[2]) - max(a[0], b[0]))
-    iy = max(0, min(a[3], b[3]) - max(a[1], b[1]))
-    small = min((a[2] - a[0]) * (a[3] - a[1]), (b[2] - b[0]) * (b[3] - b[1])) or 1
-    return ix * iy / small
-
-
 def provider_status():
     cfg = load_config()
     out = {}
@@ -395,8 +379,8 @@ def translate_pages(pages, lang, page_url="", fast=False, _retry=False):
             continue
         with_image = name == "gemini" or bool(pc.get("vision") or pc.get("vision_models"))
         page_list = [(im.size, gs) for im, gs in pages]
-        prompt = build_prompt(None, lang, None, memory, with_image, pages=page_list)
-        prompt_txt = build_prompt(None, lang, None, memory, False, pages=page_list) if with_image else None
+        prompt = build_prompt(page_list, lang, memory, with_image)
+        prompt_txt = build_prompt(page_list, lang, memory, False) if with_image else None
         imgs = None
         if with_image:
             imgs, start = [], 1
@@ -521,7 +505,7 @@ def _run_batch(batch):
 
 
 def translate_with_llm(img, groups, lang, page_url="", fast=False):
-    """Return (hindi_list, provider_name, extras) ya None. Aas-paas ke pages apne aap ek request mein jaate hain."""
+    """Return (hindi_list, provider_name) ya None. Aas-paas ke pages apne aap ek request mein jaate hain."""
     global _worker
     with _worker_lock:
         if _worker is None:
@@ -531,59 +515,4 @@ def translate_with_llm(img, groups, lang, page_url="", fast=False):
            "done": threading.Event()}
     _jobs.put(job)
     job["done"].wait(timeout=240)
-    r = job.get("result")
-    if not r:
-        return None
-    return r[0], r[1], []
-
-
-def boxes_from_llm(lines, W, H):
-    out = []
-    for l in lines or []:
-        b, hi = l.get("box_2d"), str(l.get("hi") or "").strip()
-        hi = re.sub(r"[A-Za-z]+", "", hi).strip()
-        if not hi or not isinstance(b, list) or len(b) != 4:
-            continue
-        try:
-            y0, x0, y1, x1 = (int(max(0, min(1000, float(v))) * s / 1000) for v, s in zip(b, (H, W, H, W)))
-        except (TypeError, ValueError):
-            continue
-        if x1 - x0 < 5 or y1 - y0 < 5:
-            continue
-        # Gemini ke box aksar thode chhote: kinare tak mitane ke liye badhao
-        px, py = int((x1 - x0) * 0.12) + 6, int((y1 - y0) * 0.06) + 6
-        x0, y0, x1, y1 = max(0, x0 - px), max(0, y0 - py), min(W, x1 + px), min(H, y1 + py)
-        out.append({"box": (x0, y0, x1, y1), "text": str(l.get("text", "")), "hi": hi})
-    return out
-
-
-# ---------- OCR ko kuch nahi mila: Gemini khud text dhoondhe (stylized / khada text, SFX) ----------
-def detect_with_llm(img, page_url=""):
-    """Return list of {"box": (x0,y0,x1,y1) pixels, "hi": str} ya None."""
-    cfg = load_config()
-    if not cfg["gemini"].get("api_key") or _cooldown.get("gemini", 0) > time.time():
-        return None
-    memory = get_memory(series_key(page_url))
-    chars = ", ".join(f"{n} ({'female' if g == 'f' else 'male'})" for n, g in memory["characters"].items()) or "none yet"
-    prompt = f"""This is a manga/comic page. Normal OCR found no text, but there may be stylized text
-(big shouted lines, stacked vertical letters, narration, sound effects).
-Find every piece of readable text (ignore watermarks / site names / page numbers) and translate it into
-natural, casual spoken Hindi (Devanagari), like young people talk / Hindi anime dubs, not bookish Hindi.
-Match the speaker's gender in verbs (female: "रही हूँ", male: "रहा हूँ"). Known characters: {chars}.
-Keep names as they are in Devanagari, numbers as 0-9, keep it short and keep the emotion.
-Use ONLY Devanagari letters in "hi" (no Latin letters); for shouting just use "!!!" (do not repeat matras).
-For each text block give "box_2d": [ymin, xmin, ymax, xmax] normalized to 0-1000, covering the whole block.
-Return ONLY JSON: {{"lines": [{{"box_2d": [ymin, xmin, ymax, xmax], "text": "original", "hi": "Hindi"}}]}}  (empty list if no text)."""
-    data = None
-    for attempt in range(2):  # JSON toota aaye to ek baar aur
-        try:
-            raw = call_gemini(cfg, prompt, _jpeg_b64(img, cfg["image_max_side"]))
-            data = _parse_json(raw)
-            break
-        except Exception as e:
-            print(f"[gemini detect] fail ({attempt + 1}):", e)
-    if data is None:
-        return None
-    out = boxes_from_llm(data.get("lines", []), *img.size)
-    print(f"[gemini detect] {len(out)} text blocks mile")
-    return out
+    return job.get("result")

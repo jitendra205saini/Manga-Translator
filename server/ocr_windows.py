@@ -9,7 +9,6 @@ from winrt.windows.graphics.imaging import (
     BitmapAlphaMode,
     BitmapDecoder,
     BitmapPixelFormat,
-    SoftwareBitmap,
 )
 from winrt.windows.media.ocr import OcrEngine
 from winrt.windows.storage.streams import DataWriter, InMemoryRandomAccessStream

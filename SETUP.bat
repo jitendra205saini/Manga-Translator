@@ -1,33 +1,32 @@
 @echo off
+rem Developer setup (installer ki zarurat nahi): Python 3.11+ chahiye. Offline NLLB backup ke liye: SETUP.bat nllb
 setlocal
 cd /d "%~dp0"
-echo ===== Manga Translator setup (Python 3.13 + existing PyTorch) =====
-
-py -3.13 -c "import torch" >nul 2>&1
-if errorlevel 1 (
-  echo [ERROR] Python 3.13 mein PyTorch nahi mila.
-  pause
-  exit /b 1
-)
+echo ===== Manga Translator developer setup =====
 
 if not exist "manga_env\Scripts\python.exe" (
-  py -3.13 -m venv --system-site-packages manga_env || goto :fail
+  py -3 -m venv manga_env || goto :fail
 )
 set "VPY=%~dp0manga_env\Scripts\python.exe"
 
 "%VPY%" -m pip install --upgrade pip || goto :fail
-"%VPY%" -m pip install -r server\requirements.txt -r server\requirements-nllb.txt || goto :fail
+"%VPY%" -m pip install -r server\requirements.txt || goto :fail
+set "NLLB=--no-nllb"
+if /i "%~1"=="nllb" (
+  "%VPY%" -m pip install torch -r server\requirements-nllb.txt || goto :fail
+  set "NLLB="
+)
 
 cd server
 echo.
-echo ===== Fribidi, config, font aur NLLB model download =====
-"%VPY%" download_assets.py || goto :fail
+echo ===== Fonts, models, config =====
+"%VPY%" download_assets.py %NLLB% || goto :fail
 echo.
 echo ===== Setup check =====
 "%VPY%" check_setup.py
 cd ..
 echo.
-echo Setup complete. Ab server\config.json mein apni Gemini/Groq key daalo, phir START_SERVER.bat chalao.
+echo Setup complete. START.bat chalao, phir browser mein API key daalo.
 pause
 exit /b 0
 

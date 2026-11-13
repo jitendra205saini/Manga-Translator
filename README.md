@@ -141,7 +141,6 @@ manga-translator/
 ├── SETUP.bat                  # one-time setup
 ├── START.bat                  # one-click start
 ├── STOP.bat                   # stop the server
-├── START_SERVER.bat           # start the local server (console window)
 └── INSTALL_OCR_LANGUAGES.bat  # install Windows OCR language packs
 ```
 

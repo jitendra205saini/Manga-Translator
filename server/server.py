@@ -1,18 +1,17 @@
-# FastAPI server: POST /translate  {image: base64, lang: "Auto"}
+# FastAPI server: POST /translate  {image: base64 | src: url, lang, page_url, fast}
 import dllfix  # noqa: F401  (PIL se pehle)
 import asyncio
 import base64
-import traceback
-
-import requests
-from contextlib import asynccontextmanager
-
 import json
 import os
+import re
+import traceback
+from contextlib import asynccontextmanager
 
+import requests
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 import llm
@@ -47,7 +46,17 @@ async def lifespan(app):
 
 
 app = FastAPI(lifespan=lifespan)
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+# sirf apna browser extension aur apna /setup page: koi website tumhara AI quota use na kar sake
+ALLOWED_ORIGIN = r"^(moz-extension|chrome-extension)://[^/]+$|^http://(127\.0\.0\.1|localhost):7860$"
+app.add_middleware(CORSMiddleware, allow_origin_regex=ALLOWED_ORIGIN, allow_methods=["*"], allow_headers=["*"])
+
+
+@app.middleware("http")
+async def block_websites(request, call_next):
+    origin = request.headers.get("origin")
+    if request.method == "POST" and origin and not re.match(ALLOWED_ORIGIN, origin):
+        return JSONResponse({"error": "only the Manga Translator extension can use this server"}, status_code=403)
+    return await call_next(request)
 
 
 class TranslateRequest(BaseModel):
