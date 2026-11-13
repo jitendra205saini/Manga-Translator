@@ -265,10 +265,14 @@ Debug ke liye server log mein har page ki language, kaunsa provider chala aur ha
 
 - [x] ML bubble aur text detector (`comic-text-and-bubble-detector`)
 - [x] Art ke upar text ke liye LaMa inpainting
-- [x] Ek AI request mein kai pages, taaki free limit zyaada chale
+- [x] AI requests ek saath, har page alag (page ~5-10 second)
 - [x] Disk cache: dobara khole chapter par request kharch nahi
 - [x] Comic style Devanagari font (Baloo 2)
 - [x] Original / Hindi toggle (Alt+O)
+- [x] Windows installer aur saaf uninstaller
+- [x] System tray app, ek click auto-update
+- [x] AI ne jo bubble khaali chhoda use dobara puchna
+- [x] API key ka setup page (install ke waqt key nahi chahiye)
 - [ ] Behtar OCR: Japanese ke liye `manga-ocr`, English / Korean / Chinese ke liye PaddleOCR
 - [ ] Signed Firefox add-on (permanent install)
 

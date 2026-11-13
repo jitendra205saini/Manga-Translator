@@ -266,10 +266,14 @@ gender (`m` / `f` / `u`). The original and translated versions of the last 40 pa
 
 - [x] ML bubble and text detector (`comic-text-and-bubble-detector`)
 - [x] LaMa inpainting for text drawn on artwork
-- [x] Several pages per AI request to stretch the free limit
+- [x] Parallel AI requests, one page each (about 5-10 s per page)
 - [x] Disk cache, so re-opened chapters cost no requests
 - [x] Comic-style Devanagari font (Baloo 2)
 - [x] Original / Hindi toggle (Alt+O)
+- [x] Windows installer and clean uninstaller
+- [x] System tray app with one-click auto-update
+- [x] Re-ask for bubbles the AI left empty
+- [x] API key setup page (no key needed during install)
 - [ ] Better OCR: `manga-ocr` for Japanese, PaddleOCR for English / Korean / Chinese
 - [ ] Signed Firefox add-on (permanent install)
 
