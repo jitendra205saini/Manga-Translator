@@ -277,7 +277,7 @@ Debug ke liye server log mein har page ki language, kaunsa provider chala aur ha
 - [x] Popup mein aaj ka hisaab aur Gemini quota
 - [x] Japanese ke liye `manga-ocr` (ONNX, bina PyTorch): khada text, furigana, stylish font
 - [ ] Korean / Chinese ke liye PaddleOCR
-- [ ] Signed Firefox add-on (permanent install)
+- [x] Signed Firefox add-on (hamesha installed, `installer/signed/manga-translator.xpi`)
 
 ## License
 

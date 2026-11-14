@@ -38,6 +38,8 @@ Source: "{#Root}\extension\*"; DestDir: "{app}\extension"; Flags: recursesubdirs
 Source: "{#Root}\installer\install.ps1"; DestDir: "{app}\installer"; Flags: ignoreversion
 Source: "{#Root}\installer\stop.ps1"; DestDir: "{app}\installer"; Flags: ignoreversion
 Source: "{#Root}\installer\browser.html"; DestDir: "{app}\installer"; Flags: ignoreversion
+; Mozilla se signed Firefox add-on: hamesha installed rehta hai
+Source: "{#Root}\installer\signed\manga-translator.xpi"; DestDir: "{app}\extension"; Flags: ignoreversion
 Source: "{#Root}\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#Root}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 
@@ -59,7 +61,10 @@ Name: "{userstartup}\{#AppName}"; Filename: "{app}\python\pythonw.exe"; Paramete
 [Run]
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\installer\install.ps1"" -AppDir ""{app}"""; \
   StatusMsg: "Downloading Python and AI models (about 600 MB, a few minutes)..."; Flags: waituntilterminated runhidden
-Filename: "{app}\installer\browser.html"; Description: "Add the extension to my browser"; Flags: postinstall shellexec skipifsilent
+Filename: "firefox.exe"; Parameters: """{app}\extension\manga-translator.xpi"""; \
+  Description: "Add the extension to Firefox"; Flags: postinstall shellexec skipifsilent nowait; Check: HasFirefox
+Filename: "{app}\installer\browser.html"; Description: "Show how to add the extension to Chrome / Edge"; \
+  Flags: postinstall shellexec skipifsilent unchecked
 Filename: "{app}\python\pythonw.exe"; Parameters: """{app}\server\tray.py"""; WorkingDir: "{app}\server"; \
   Description: "Start Manga Translator now"; Flags: postinstall nowait skipifsilent
 ; auto-update (silent install) ke baad tray khud dobara chalu
@@ -74,6 +79,12 @@ Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Fil
 Type: filesandordirs; Name: "{app}"
 
 [Code]
+function HasFirefox: Boolean;
+begin
+  Result := RegKeyExists(HKLM, 'SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\firefox.exe') or
+            RegKeyExists(HKCU, 'SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\firefox.exe');
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var Code: Integer;
 begin
