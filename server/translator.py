@@ -168,7 +168,7 @@ def _manga_ocr(img, dets, lines, lang):
 
 # ---------- disk cache (server band hone par bhi yaad) ----------
 CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache")
-CACHE_VERSION = "v6"
+CACHE_VERSION = "v7"
 
 
 def _disk_get(key):

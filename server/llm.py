@@ -213,6 +213,8 @@ def usage_today():
 def clean_hi(text):
     # Hindi font mein English akshar nahi (dabbe bante hain): website/watermark jaise Latin hatao
     text = str(text or "")
+    # toota akshar (U+FFFD) aur zero-width kachra: font mein dabba banta hai
+    text = re.sub(r"[�​⁠﻿]", "", text).replace("््", "्")
     text = re.sub(r"\S*\.(com|net|org|io|co)\S*", "", text, flags=re.I)
     # Baloo 2 font Latin bhi dikhata hai: "PLAIN" jaise chhote English shabd rehne do
     text = re.sub(r"\s+", " ", text).strip()
@@ -369,7 +371,7 @@ def provider_status():
     return out
 
 
-def translate_pages(pages, lang, page_url="", fast=False, _retry=False):
+def translate_pages(pages, lang, page_url="", fast=False, _retry=False, _waited=False):
     """pages = [(img, groups), ...]. Return ([hindi_list per page], provider) ya None."""
     cfg = load_config()
     key = series_key(page_url)
@@ -433,6 +435,15 @@ def translate_pages(pages, lang, page_url="", fast=False, _retry=False):
             print(f"[{name}] {e}, {wait}s ke liye skip")
         except Exception as e:
             print(f"[{name}] fail: {e}")
+    # sab ki per-minute limit lagi hai: page chhodne ki jagah limit khulne tak ruko, phir ek baar aur
+    if not _retry and not _waited:
+        waits = [_cooldown[p] - time.time() for p in order
+                 if p in PROVIDERS and cfg.get(p, {}).get("api_key") and _cooldown.get(p, 0) > time.time()]
+        if waits and min(waits) <= 70:
+            w = min(waits) + 1
+            print(f"[limit] sab providers ruke hain, {w:.0f}s baad dobara")
+            time.sleep(w)
+            return translate_pages(pages, lang, page_url, fast, _waited=True)
     return None
 
 
@@ -442,7 +453,8 @@ def _has_words(text):
 
 def _reask_missing(pages, all_groups, hindi, lang, page_url, fast):
     """Jin bubbles mein asli shabd the par jawab khaali / "..." aaya, sirf unhe ek baar dobara puchho."""
-    miss = [i for i, (g, h) in enumerate(zip(all_groups, hindi)) if _has_words(g.get("text")) and not h]
+    miss = [i for i, (g, h) in enumerate(zip(all_groups, hindi))
+            if (_has_words(g.get("text")) and not h) or _bad_script(h)]
     if not miss:
         return hindi
     sub, idx, k = [], [], 0
@@ -463,9 +475,26 @@ def _reask_missing(pages, all_groups, hindi, lang, page_url, fast):
     flat = [h for part in res[0] for h in part]
     hindi = list(hindi)
     for i, h in zip(idx, flat):
-        if h:
+        if h and not _bad_script(h):
             hindi[i] = h
-    return hindi
+    # dobara bhi galat lipi aayi to Urdu akshar Devanagari mein badlo (font mein Urdu nahi, dabbe dikhte)
+    return [_fix_script(h) if _bad_script(h) else h for h in hindi]
+
+
+_ARABIC = re.compile(r"[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]")
+_URDU = {"ا": "ा", "آ": "आ", "ب": "ब", "پ": "प", "ت": "त", "ٹ": "ट", "ث": "स", "ج": "ज", "چ": "च",
+         "ح": "ह", "خ": "ख़", "د": "द", "ڈ": "ड", "ذ": "ज़", "ر": "र", "ڑ": "ड़", "ز": "ज़", "ژ": "झ",
+         "س": "स", "ش": "श", "ص": "स", "ض": "ज़", "ط": "त", "ظ": "ज़", "ع": "अ", "غ": "ग़", "ف": "फ़",
+         "ق": "क़", "ک": "क", "ك": "क", "گ": "ग", "ل": "ल", "م": "म", "ن": "न", "ں": "ं", "و": "ो",
+         "ہ": "ह", "ه": "ह", "ھ": "्ह", "ی": "ी", "ي": "ी", "ے": "े", "ء": ""}
+
+
+def _bad_script(h):
+    return bool(h) and bool(_ARABIC.search(h))
+
+
+def _fix_script(h):
+    return _ARABIC.sub("", "".join(_URDU.get(c, c) for c in h))
 
 
 # ---------- batching: thodi der ruk kar aas-paas ke pages ek hi request mein ----------
