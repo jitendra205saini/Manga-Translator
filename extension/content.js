@@ -50,12 +50,21 @@
       const img = queue.shift();
       if (!img.isConnected) continue;
       active++;
-      // 90s mein jawab na aaye to chhod do, worker atke nahi
-      const timeout = new Promise((r) => setTimeout(() => r("timeout"), 90000));
+      // 3 min mein jawab na aaye to chhod do (server limit khulne ka intezaar karta hai), phir dobara
+      const timeout = new Promise((r) => setTimeout(() => r("timeout"), 180000));
       Promise.race([processImage(img), timeout]).then((r) => {
-        if (r === "timeout") { console.warn("[manga-tr] timeout", img.src); seen.delete(img); }
+        if (r === "timeout") { console.warn("[manga-tr] timeout", img.src); retryLater(img); }
       }).finally(() => { active--; pump(); });
     }
+  }
+
+  // fail hua page khud dobara bhejo (scroll ka intezaar nahi): 15s, 45s, 90s baad
+  const tries = new WeakMap();
+  function retryLater(img) {
+    const n = (tries.get(img) || 0) + 1;
+    tries.set(img, n);
+    if (n > 3) { console.warn("[manga-tr] 3 baar fail, chhod diya", img.src); return; }
+    setTimeout(() => { seen.delete(img); if (on) enqueue(img); }, [15000, 45000, 90000][n - 1]);
   }
 
   // Tarika 0: same-origin image ho to seedha canvas se
@@ -104,11 +113,11 @@
         if (!showOriginal) img.src = hindi;
       } else if (res && res.error) {
         console.warn("[manga-tr]", res.error);
-        if (res.retry) setTimeout(() => seen.delete(img), 5000);
+        retryLater(img);
       }
     } catch (e) {
       console.warn("[manga-tr]", e);
-      setTimeout(() => seen.delete(img), 5000);  // background so gaya / error: baad mein dobara
+      retryLater(img);  // background so gaya / error: thodi der baad dobara
     } finally {
       img.style.outline = oldOutline;
     }

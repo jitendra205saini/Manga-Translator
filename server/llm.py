@@ -253,6 +253,18 @@ def _check(r, name):
 
 
 GEMINI_BUDGET = 40
+# free key ki per-minute limit: requests ek saath nahi, barabar faasle pe (429 aur chhoote pages se bachav)
+_pace_lock = threading.Lock()
+_pace_next = {}
+
+
+def _pace(name, rpm):
+    with _pace_lock:
+        now = time.time()
+        at = max(now, _pace_next.get(name, 0))
+        _pace_next[name] = at + 60.0 / max(1, rpm)
+    if at > now:
+        time.sleep(at - now)
 _gemini_dead = set()
 _gemini_good = None
 
@@ -275,6 +287,7 @@ def call_gemini(cfg, prompt, img_b64):
             left = deadline - time.time()
             if left < 5:
                 raise RuntimeError(f"gemini: {GEMINI_BUDGET}s mein jawab nahi ({last or 'timeout'})")
+            _pace("gemini", cfg.get("gemini_rpm", 14))
             try:
                 r = requests.post(
                     f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
@@ -327,6 +340,7 @@ def call_groq(cfg, prompt, img_b64, prompt_txt=None):
                 {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + b}} for b in imgs]
         else:
             content = prompt_txt or prompt
+        _pace("groq", cfg.get("groq_rpm", 25))
         r = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
             headers={"Authorization": "Bearer " + c["api_key"]},
@@ -512,8 +526,8 @@ def _batch_worker():
         first = _jobs.get()
         batch = [first]
         cfg = load_config()
-        max_pages = max(1, int(cfg.get("batch_pages", 1)))
-        deadline = time.time() + float(cfg.get("batch_wait", 0.3))
+        max_pages = max(1, int(cfg.get("batch_pages", 3)))
+        deadline = time.time() + float(cfg.get("batch_wait", 0.6))
         while len(batch) < max_pages:
             left = deadline - time.time()
             if left <= 0:
