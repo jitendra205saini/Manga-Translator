@@ -26,27 +26,87 @@
     return r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth;
   };
 
+  // lazy-load wali sites: asli URL data-src jaise attribute mein hota hai, image abhi load nahi hui
+  const LAZY = ["data-src", "data-lazy-src", "data-original", "data-url"];
+  function lazySrc(img) {
+    for (const a of LAZY) {
+      const v = (img.getAttribute(a) || "").trim();
+      if (/^(https?:)?\/\//.test(v)) return new URL(v, location.href).href;
+    }
+    // browser ka apna lazy-load: tab chhod do to image kabhi load nahi hoti, URL seedha bhejo
+    if (img.loading === "lazy" && /^https?:/.test(img.src)) return img.src;
+    return null;
+  }
+  const loaded = (img) => img.complete && img.naturalWidth >= MIN_W && img.naturalHeight >= MIN_H;
+
   function isCandidate(img) {
+    if (img.dataset.mtDone || seen.has(img)) return false;
     // screen par chhoti dikhne wali (thumbnails, ads) skip
     if (img.getBoundingClientRect().width < 350) return false;
-    return img.complete && img.naturalWidth >= MIN_W && img.naturalHeight >= MIN_H &&
-      !img.dataset.mtDone && !seen.has(img);
+    return loaded(img) || !!lazySrc(img);
   }
 
   function enqueue(img) {
     if (!on || !isCandidate(img)) return;
     seen.add(img);
     queue.push(img);
+    badge(img, "wait");
     pump();
   }
+
+  // ---------- loading parda: user ko dikhe ki page translate ho raha hai ----------
+  const badges = new Map();
+  let styled = false;
+  function badge(img, state) {
+    let el = badges.get(img);
+    if (!state) { if (el) { el.remove(); badges.delete(img); } return; }
+    if (!styled) {
+      styled = true;
+      const st = document.createElement("style");
+      st.textContent = `
+        .mt-ov{position:absolute;z-index:2147483646;pointer-events:none;display:flex;justify-content:center;
+          background:rgba(0,0,0,.18);transition:background .3s}
+        .mt-ov.work{background:rgba(0,0,0,.55)}
+        .mt-ov>div{position:sticky;top:45vh;align-self:flex-start;margin-top:40px;display:flex;align-items:center;gap:10px;
+          background:rgba(20,20,20,.85);color:#fff;font:600 15px/1.2 system-ui,sans-serif;padding:10px 16px;border-radius:22px}
+        .mt-ov i{width:18px;height:18px;border:3px solid #fff4;border-top-color:#ff9a3c;border-radius:50%;
+          animation:mtspin .8s linear infinite;display:none}
+        .mt-ov.work i{display:block}
+        @keyframes mtspin{to{transform:rotate(360deg)}}`;
+      document.documentElement.appendChild(st);
+    }
+    if (!el) {
+      el = document.createElement("div");
+      el.className = "mt-ov";
+      el.innerHTML = "<div><i></i><span></span></div>";
+      document.body.appendChild(el);
+      badges.set(img, el);
+    }
+    el.classList.toggle("work", state === "work");
+    el.querySelector("span").textContent = state === "work" ? "अनुवाद हो रहा है…" : "कतार में…";
+    place(img, el);
+  }
+  function place(img, el) {
+    const r = img.getBoundingClientRect();
+    if (!img.isConnected || !r.width) { el.style.display = "none"; return; }
+    Object.assign(el.style, { display: "flex", left: r.left + scrollX + "px", top: r.top + scrollY + "px",
+      width: r.width + "px", height: r.height + "px" });
+  }
+  let raf = 0;
+  const placeAll = () => {
+    if (!raf) raf = requestAnimationFrame(() => { raf = 0; badges.forEach((el, img) => place(img, el)); });
+  };
+  addEventListener("scroll", placeAll, { passive: true });
+  addEventListener("resize", placeAll);
+  setInterval(placeAll, 1000);  // lazy images load hone se layout khisakta hai
 
   // ek saath 5 pages (AI ka intezaar parallel mein)
   const WORKERS = 5;
   let active = 0;
   function pump() {
     while (on && active < WORKERS && queue.length) {
-      // jo page screen ke sabse paas hai wo pehle
-      queue.sort((a, b) => Math.abs(a.getBoundingClientRect().top) - Math.abs(b.getBoundingClientRect().top));
+      // chapter upar se neeche, kram se (mouse/scroll kahin bhi ho)
+      queue.sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
       const img = queue.shift();
       if (!img.isConnected) continue;
       active++;
@@ -60,10 +120,18 @@
 
   // fail hua page khud dobara bhejo (scroll ka intezaar nahi): 15s, 45s, 90s baad
   const tries = new WeakMap();
+  const gaveUp = new Set();
+  // tab par wapas aaye: jo pages chhoot gaye the (screenshot ki zaroorat thi) unhe phir se
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden || !on) return;
+    for (const img of gaveUp) { tries.delete(img); seen.delete(img); enqueue(img); }
+    gaveUp.clear();
+  });
   function retryLater(img) {
     const n = (tries.get(img) || 0) + 1;
     tries.set(img, n);
-    if (n > 3) { console.warn("[manga-tr] 3 baar fail, chhod diya", img.src); return; }
+    if (n > 3) { console.warn("[manga-tr] 3 baar fail, tab par wapas aane par dobara", img.src); gaveUp.add(img); badge(img, null); return; }
+    badge(img, "wait");
     setTimeout(() => { seen.delete(img); if (on) enqueue(img); }, [15000, 45000, 90000][n - 1]);
   }
 
@@ -81,18 +149,22 @@
   }
 
   function fullRect(img) {
+    // screenshot sirf dikh rahe tab ka hota hai: tab chhoda hua ho to galat page aa jaata
+    if (document.hidden) return null;
     const r = img.getBoundingClientRect();
     const full = r.top >= 0 && r.left >= 0 && r.bottom <= innerHeight && r.right <= innerWidth;
     return full ? { x: r.left, y: r.top, w: r.width, h: r.height, vw: innerWidth } : null;
   }
 
   async function processImage(img) {
-    const src = img.currentSrc || img.src;
-    const oldOutline = img.style.outline;
-    img.style.outline = "3px dashed orange";
+    const lazy = loaded(img) ? null : lazySrc(img);
+    const src = lazy || img.currentSrc || img.src;
+    badge(img, "work");
+    let ok = false;
     try {
-      const msg = { type: "translate", image: canvasBase64(img) };
-      if (!msg.image) {
+      const msg = { type: "translate", image: lazy ? null : canvasBase64(img) };
+      if (lazy) msg.src = lazy;
+      else if (!msg.image) {
         if (/^https?:/.test(src)) msg.src = src;
         msg.rect = fullRect(img);
       }
@@ -100,7 +172,9 @@
       // OFF ho gaya, ya timeout ke baad dobara bheja hua page pehle hi lag gaya: purana jawab mat lagao
       if (!on || img.dataset.mtDone) return;
       if (res && res.image) {
-        originals.set(img, { src, srcset: img.getAttribute("srcset") });
+        const lazyAttrs = {};
+        for (const a of LAZY) if (img.hasAttribute(a)) lazyAttrs[a] = img.getAttribute(a);
+        originals.set(img, { src: img.getAttribute("src") || src, srcset: img.getAttribute("srcset"), lazyAttrs });
         img.removeAttribute("srcset");
         const pic = img.closest("picture");
         if (pic) pic.querySelectorAll("source").forEach((s) => {
@@ -110,7 +184,10 @@
         img.dataset.mtDone = "1";
         const hindi = "data:image/png;base64," + res.image;
         originals.get(img).hindi = hindi;
+        // site ka lazy-loader baad mein original wapas na laga de
+        for (const a in lazyAttrs) img.setAttribute(a, hindi);
         if (!showOriginal) img.src = hindi;
+        ok = true;
       } else if (res && res.error) {
         console.warn("[manga-tr]", res.error);
         retryLater(img);
@@ -119,13 +196,14 @@
       console.warn("[manga-tr]", e);
       retryLater(img);  // background so gaya / error: thodi der baad dobara
     } finally {
-      img.style.outline = oldOutline;
+      if (ok || !on) badge(img, null);
     }
   }
 
   function restoreAll() {
     for (const [img, o] of originals) {
       if (o.srcset) img.setAttribute("srcset", o.srcset);
+      for (const a in o.lazyAttrs || {}) img.setAttribute(a, o.lazyAttrs[a]);
       img.src = o.src;
       delete img.dataset.mtDone;
       const pic = img.closest("picture");
@@ -137,13 +215,10 @@
     originals.clear();
   }
 
-  // har 3s: screen ke paas wali bachi hui images dobara check (fail/miss hui ho to retry)
+  // har 3s: poore chapter ki bachi hui images (kram queue khud sambhalti hai: upar se neeche)
   let scanTimer = null;
   function scan() {
-    document.querySelectorAll("img").forEach((img) => {
-      const r = img.getBoundingClientRect();
-      if (r.bottom > -AHEAD && r.top < innerHeight + AHEAD) enqueue(img);
-    });
+    document.querySelectorAll("img").forEach(enqueue);
   }
 
   function watch(img) {
@@ -172,6 +247,7 @@
       }
     });
     mo.observe(document.documentElement, { childList: true, subtree: true });
+    scan();
     scanTimer = setInterval(scan, 3000);
   }
 
@@ -181,6 +257,8 @@
     io = mo = null;
     clearInterval(scanTimer);
     queue.length = 0;
+    badges.forEach((el) => el.remove());
+    badges.clear();
     restoreAll();
   }
 

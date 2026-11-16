@@ -159,7 +159,7 @@ async function handleTranslate(msg, tab) {
   }
 
   // 4) screenshot + crop (image poori screen par ho tab)
-  if (!b64 && msg.rect) b64 = await captureCrop(tab, msg.rect).catch((e) => { console.warn("capture fail", e); return null; });
+  if (!b64 && msg.rect && tab.active) b64 = await captureCrop(tab, msg.rect).catch((e) => { console.warn("capture fail", e); return null; });
   if (!b64) return { error: "could not get the image (scroll the whole page into view)", retry: true };
   return postServer({ ...base, image: b64 });
 }
