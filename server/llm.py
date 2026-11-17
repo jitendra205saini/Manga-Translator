@@ -390,6 +390,20 @@ _cooldown = {}   # provider -> time.time() tak band
 _strikes = {}    # lagatar 429 ki ginti
 
 
+def limit_wait():
+    """Saare AI providers limit par hon to kitne second baad khulenge; koi chalu ho to 0."""
+    cfg = load_config()
+    now = time.time()
+    waits = []
+    for p in cfg["providers"]:
+        if p in PROVIDERS and cfg.get(p, {}).get("api_key"):
+            w = _cooldown.get(p, 0) - now
+            if w <= 0:
+                return 0
+            waits.append(w)
+    return int(min(waits)) + 1 if waits else 0
+
+
 def provider_status():
     cfg = load_config()
     out = {}

@@ -64,7 +64,7 @@ const $ = (id) => document.getElementById(id);
       $("prog").style.display = "block";
       $("progbar").style.width = Math.round(100 * p.done / p.total) + "%";
       $("progtxt").textContent = p.done >= p.total ? `Chapter done: ${p.done} pages` :
-        `${p.done} / ${p.total} pages translated` + (p.failed ? ` (${p.failed} will retry)` : "");
+        `${p.done} / ${p.total} pages translated` + (p.limitMin ? ` — AI free limit over, resumes in ~${p.limitMin} min` : p.failed ? ` (${p.failed} will retry)` : "");
     } catch (e) { $("prog").style.display = "none"; }
   }
   progress();

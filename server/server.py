@@ -154,4 +154,7 @@ async def translate(req: TranslateRequest):
         return await translator.translate_page(raw, req.lang, req.page_url, req.fast, req.url, req.fresh)
     except Exception as e:
         traceback.print_exc()
+        wait = llm.limit_wait()
+        if wait:
+            return {"error": "AI ki free limit khatam", "retry_after": wait}
         return {"error": str(e)}

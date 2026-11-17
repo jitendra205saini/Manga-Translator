@@ -57,6 +57,14 @@
   // ---------- loading parda: user ko dikhe ki page translate ho raha hai ----------
   const badges = new Map();
   let styled = false;
+  let limitUntil = 0;
+  function limitText() {
+    const m = Math.max(1, Math.ceil((limitUntil - Date.now()) / 60000));
+    return `AI ki free limit khatam — ~${m} min baad apne aap`;
+  }
+  setInterval(() => {
+    if (limitUntil > Date.now()) for (const [img, el] of badges) if (el.classList.contains("limit")) el.querySelector("span").textContent = limitText();
+  }, 20000);
   function badge(img, state) {
     let el = badges.get(img);
     if (!state) { if (el) { el.remove(); badges.delete(img); } return; }
@@ -83,7 +91,8 @@
       badges.set(img, el);
     }
     el.classList.toggle("work", state === "work");
-    el.querySelector("span").textContent = state === "work" ? "अनुवाद हो रहा है…" : "कतार में…";
+    el.classList.toggle("limit", state === "limit");
+    el.querySelector("span").textContent = state === "work" ? "अनुवाद हो रहा है…" : state === "limit" ? limitText() : "कतार में…";
     place(img, el);
   }
   function place(img, el) {
@@ -104,6 +113,12 @@
   const WORKERS = 5;
   let active = 0;
   function pump() {
+    if (limitUntil > Date.now()) {
+      for (const q of queue) badge(q, "limit");
+      clearTimeout(pump.t);
+      pump.t = setTimeout(pump, limitUntil - Date.now() + 3000);
+      return;
+    }
     while (on && active < WORKERS && queue.length) {
       // chapter upar se neeche, kram se (mouse/scroll kahin bhi ho)
       queue.sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
@@ -258,6 +273,11 @@
         for (const a in lazyAttrs) img.setAttribute(a, hindi);
         if (!showOriginal) img.src = hindi;
         ok = true;
+      } else if (res && res.retry_after) {
+        // AI ki free limit khatam: page par saaf batao, limit khulte hi apne aap (tries nahi ginte)
+        limitUntil = Math.max(limitUntil, Date.now() + res.retry_after * 1000);
+        badge(img, "limit");
+        setTimeout(() => { seen.delete(img); if (on && !img.dataset.mtDone) enqueue(img); }, res.retry_after * 1000 + 3000);
       } else if (res && res.error) {
         console.warn("[manga-tr]", res.error);
         retryLater(img);
@@ -341,7 +361,7 @@
     }
     if (msg.type === "progress") {
       const done = [...originals.keys()].filter((i) => i.isConnected).length;
-      sendResponse({ done, total: done + badges.size + gaveUp.size, failed: gaveUp.size });
+      sendResponse({ done, total: done + badges.size + gaveUp.size, failed: gaveUp.size, limitMin: limitUntil > Date.now() ? Math.ceil((limitUntil - Date.now()) / 60000) : 0 });
       return;
     }
     if (msg.type === "toggleOriginal") {
