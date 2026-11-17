@@ -206,7 +206,7 @@ def usage_today():
     usage_bump("_", 0)
     cfg = load_config()
     out = dict(_usage)
-    out["gemini_limit"] = int(cfg["gemini"].get("daily_limit", 500))
+    out["gemini_limit"] = int(cfg["gemini"].get("daily_limit", 500)) * max(1, len(gemini_keys(cfg)))
     return out
 
 
@@ -269,7 +269,28 @@ _gemini_dead = set()
 _gemini_good = None
 
 
+_gkey_rest = {}  # key -> time.time() tak limit
+
+
+def gemini_keys(cfg):
+    """Ek ya kai keys (comma se alag): ek ki limit khatam ho to agli."""
+    return [k for k in re.split(r"[,\s]+", str(cfg["gemini"].get("api_key") or "")) if k]
+
+
 def call_gemini(cfg, prompt, img_b64):
+    keys = gemini_keys(cfg)
+    order = [k for k in keys if _gkey_rest.get(k, 0) <= time.time()] or keys
+    for i, key in enumerate(order):
+        try:
+            return _gemini_one(cfg, key, len(keys), prompt, img_b64)
+        except RateLimited:
+            _gkey_rest[key] = time.time() + 60
+            if i + 1 < len(order):
+                print(f"[gemini] key {keys.index(key) + 1} ki limit, agli key")
+    raise RateLimited("gemini: sab keys ki limit khatam")
+
+
+def _gemini_one(cfg, key, nkeys, prompt, img_b64):
     c = cfg["gemini"]
     parts = [{"text": prompt}]
     for b in (img_b64 if isinstance(img_b64, list) else [img_b64] if img_b64 else []):
@@ -287,11 +308,11 @@ def call_gemini(cfg, prompt, img_b64):
             left = deadline - time.time()
             if left < 5:
                 raise RuntimeError(f"gemini: {GEMINI_BUDGET}s mein jawab nahi ({last or 'timeout'})")
-            _pace("gemini", cfg.get("gemini_rpm", 14))
+            _pace("gemini", cfg.get("gemini_rpm", 14) * nkeys)
             try:
                 r = requests.post(
                     f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-                    headers={"x-goog-api-key": c["api_key"], "Content-Type": "application/json"},
+                    headers={"x-goog-api-key": key, "Content-Type": "application/json"},
                     json={"contents": [{"role": "user", "parts": parts}],
                           "generationConfig": {"temperature": 0.5, "responseMimeType": "application/json"}},
                     timeout=(10, left),
@@ -427,8 +448,9 @@ def translate_pages(pages, lang, page_url="", fast=False, _retry=False, _waited=
             # SFX ka nishaan: render isse bada comic style mein likhta hai
             hindi = [SFX_MARK + h if h and by_id.get(i, {}).get("sfx") is True else h
                      for i, h in zip(range(1, total + 1), hindi)]
-            if not any(hindi):
+            if not any(hindi) and not by_id:
                 raise RuntimeError("koi translation nahi aayi")
+            # AI ne bubbles pehchane par sab "" diye (watermark / bina text ka page): page waisa hi rahe, fail nahi
             _strikes[name] = 0
             usage_bump(name)
             pairs = [[g["text"], h.lstrip(SFX_MARK)] for g, h in zip(all_groups, hindi) if h and g["text"]][-8:]
@@ -468,7 +490,7 @@ def _has_words(text):
 def _reask_missing(pages, all_groups, hindi, lang, page_url, fast):
     """Jin bubbles mein asli shabd the par jawab khaali / "..." aaya, sirf unhe ek baar dobara puchho."""
     miss = [i for i, (g, h) in enumerate(zip(all_groups, hindi))
-            if (_has_words(g.get("text")) and not h) or _bad_script(h)]
+            if (_has_words(g.get("text")) and (not h or _still_english(h))) or _bad_script(h)]
     if not miss:
         return hindi
     sub, idx, k = [], [], 0
@@ -489,7 +511,7 @@ def _reask_missing(pages, all_groups, hindi, lang, page_url, fast):
     flat = [h for part in res[0] for h in part]
     hindi = list(hindi)
     for i, h in zip(idx, flat):
-        if h and not _bad_script(h):
+        if h and not _bad_script(h) and not _still_english(h):
             hindi[i] = h
     # dobara bhi galat lipi aayi to Urdu akshar Devanagari mein badlo (font mein Urdu nahi, dabbe dikhte)
     return [_fix_script(h) if _bad_script(h) else h for h in hindi]
@@ -501,6 +523,12 @@ _URDU = {"ا": "ा", "آ": "आ", "ب": "ब", "پ": "प", "ت": "त", "ٹ": 
          "س": "स", "ش": "श", "ص": "स", "ض": "ज़", "ط": "त", "ظ": "ज़", "ع": "अ", "غ": "ग़", "ف": "फ़",
          "ق": "क़", "ک": "क", "ك": "क", "گ": "ग", "ل": "ल", "م": "म", "ن": "न", "ں": "ं", "و": "ो",
          "ہ": "ह", "ه": "ह", "ھ": "्ह", "ی": "ी", "ي": "ी", "ے": "े", "ء": ""}
+
+
+def _still_english(h):
+    # AI ne translate hi nahi kiya, English waisa hi lauta diya ("THANK YOU", "NO...!!")
+    h = (h or "").replace(SFX_MARK, "")
+    return len(re.findall(r"[A-Za-z]", h)) >= 2 and not re.search(r"[ऀ-ॿ]", h)
 
 
 def _bad_script(h):

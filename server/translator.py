@@ -14,6 +14,7 @@ from PIL import Image
 
 import detector
 import mangaocr
+import paddle_ocr
 import llm
 from nllb import translate_texts
 from ocr_windows import CJK_LANGS, OcrLanguageMissing, recognize_lines
@@ -27,6 +28,7 @@ VALID_LANGS = {"ja", "ko", "zh_hans", "zh_hant", "en"}
 
 _cache = OrderedDict()
 _series_lang = {}  # series -> pehchani hui language (Auto mode tez)
+_series_vote = {}  # series -> [pichhle pages ki language]: 2 page ek jaise hon tab hi yaad rakho
 _ocr_lock = asyncio.Lock()   # OCR/render ek time par ek; AI calls ek saath chal sakti hain
 _nllb_lock = asyncio.Lock()  # GPU
 MAX_CACHE = 20  # RAM mein (har page ~2-5 MB); baaki disk cache se
@@ -40,6 +42,9 @@ async def _ocr(img, lang):
     try:
         return await recognize_lines(img, lang)
     except OcrLanguageMissing as e:
+        # Windows mein Korean/Chinese pack nahi: PaddleOCR se pehchano
+        if paddle_ocr.available(lang):
+            return await asyncio.to_thread(paddle_ocr.recognize, img, lang)
         print("[warn]", e)
         return None
 
@@ -54,7 +59,8 @@ async def detect_and_ocr(img):
 
     if latin < 20:  # bahut saara Latin = English, Korean OCR ki zaroorat nahi
         ko = await _ocr(img, "ko") or []
-        if _count(HANGUL, ko) >= 3:
+        # credits / website header par Korean OCR 2-4 jhoothe akshar bana deta hai: pakka saboot chahiye
+        if _count(HANGUL, ko) >= 8 and _count(HANGUL, ko) > _count(LATIN, ko):
             return "ko", ko
 
     if han >= 3 and han > latin:
@@ -168,7 +174,7 @@ def _manga_ocr(img, dets, lines, lang):
 
 # ---------- disk cache (server band hone par bhi yaad) ----------
 CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache")
-CACHE_VERSION = "v7"
+CACHE_VERSION = "v8"
 
 
 def _disk_get(key):
@@ -229,17 +235,28 @@ async def translate_page(raw, lang_choice="Auto", page_url="", fast=False):
         t_ocr = time.time()
         skey = llm.series_key(page_url)
         if lang_choice in VALID_LANGS:
-            lang, lines = lang_choice, await recognize_lines(img, lang_choice)
+            lang, lines = lang_choice, (await _ocr(img, lang_choice) or [])
         elif skey in _series_lang:
             # is series ki language pehle se pata: sirf ek OCR pass (pehle 4 tak hote the)
             lang = _series_lang[skey]
-            lines = await recognize_lines(img, lang)
-            if sum(len(l["text"]) for l in lines) < 4:
+            lines = await _ocr(img, lang) or []
+            # yaad ki hui language galat lag rahi (Korean OCR par bahut Latin / kuch nahi mila): dobara pehchano
+            if sum(len(l["text"]) for l in lines) < 4 or (lang != "en" and _count(LATIN, lines) > 40):
+                _series_lang.pop(skey, None)
                 lang, lines = await detect_and_ocr(img)
         else:
             lang, lines = await detect_and_ocr(img)
-        if lang_choice not in VALID_LANGS and sum(len(l["text"]) for l in lines) >= 20:
-            _series_lang[skey] = lang
+        if lang_choice not in VALID_LANGS and skey not in _series_lang and sum(len(l["text"]) for l in lines) >= 20:
+            votes = _series_vote.setdefault(skey, [])
+            votes.append(lang)
+            if len(votes) >= 2 and votes[-1] == votes[-2]:
+                _series_lang[skey] = lang
+        # Korean / Chinese: PaddleOCR v5 Windows OCR se kaafi sahi padhta hai (language pehchanne ke baad)
+        if paddle_ocr.available(lang):
+            try:
+                lines = await asyncio.to_thread(paddle_ocr.recognize, img, lang) or lines
+            except Exception as e:
+                print("[paddle] fail, Windows OCR wala text:", e)
         t_ocr = time.time() - t_ocr
         if not detector.available():
             raise RuntimeError("Bubble detector model nahi mila. Installer / SETUP.bat dobara chalao.")

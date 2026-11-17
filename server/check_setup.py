@@ -30,4 +30,7 @@ for lang, tag in LANG_TAGS.items():
 print("ML detector    :", "OK" if detector.available() else "MISSING - download_assets.py chalao")
 print("LaMa inpaint   :", "OK" if inpaint.available() else "MISSING - download_assets.py chalao")
 print("manga-ocr      :", "OK" if mangaocr.available() else "MISSING - Japanese ke liye Windows OCR chalega")
+import paddle_ocr  # noqa: E402
+print("PaddleOCR      :", "OK" if paddle_ocr.available("ko") and paddle_ocr.available("zh_hans")
+      else "MISSING - Korean/Chinese ke liye Windows OCR chalega")
 print("AI providers   :", llm.provider_status())

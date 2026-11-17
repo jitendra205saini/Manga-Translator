@@ -83,6 +83,12 @@ HF_FILES = [
     ("l0wgear/manga-ocr-2025-onnx", "encoder_model.onnx", "manga-ocr"),
     ("l0wgear/manga-ocr-2025-onnx", "decoder_model.onnx", "manga-ocr"),
     ("l0wgear/manga-ocr-2025-onnx", "vocab.txt", "manga-ocr"),
+    # PaddleOCR v5 (Korean / Chinese manhwa, manhua)
+    ("monkt/paddleocr-onnx", "detection/v3/det.onnx", "paddleocr"),
+    ("monkt/paddleocr-onnx", "languages/korean/rec.onnx", "paddleocr"),
+    ("monkt/paddleocr-onnx", "languages/korean/dict.txt", "paddleocr"),
+    ("monkt/paddleocr-onnx", "languages/chinese/rec.onnx", "paddleocr"),
+    ("monkt/paddleocr-onnx", "languages/chinese/dict.txt", "paddleocr"),
 ]
 BALOO_URL = "https://github.com/google/fonts/raw/main/ofl/baloo2/Baloo2%5Bwght%5D.ttf"
 

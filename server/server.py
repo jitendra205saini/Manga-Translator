@@ -92,7 +92,11 @@ SETUP_ORIGINS = {"http://127.0.0.1:7860", "http://localhost:7860"}
 
 
 def _mask(k):
-    return (k[:4] + "..." + k[-4:]) if k else ""
+    keys = [x for x in k.replace(",", " ").split() if x]
+    if not keys:
+        return ""
+    m = keys[0][:4] + "..." + keys[0][-4:]
+    return m + (f" (+{len(keys) - 1} more)" if len(keys) > 1 else "")
 
 
 @app.get("/setup")

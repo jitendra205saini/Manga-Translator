@@ -163,8 +163,10 @@
     let ok = false;
     try {
       const msg = { type: "translate", image: lazy ? null : canvasBase64(img) };
-      if (lazy) msg.src = lazy;
-      else if (!msg.image) {
+      if (lazy) {
+        msg.src = lazy;
+        if ((tries.get(img) || 0) >= 1) { gaveUp.add(img); badge(img, "wait"); return; }  // 403: load hone ka intezaar
+      } else if (!msg.image) {
         if (/^https?:/.test(src)) msg.src = src;
         msg.rect = fullRect(img);
       }
@@ -218,6 +220,8 @@
   // har 3s: poore chapter ki bachi hui images (kram queue khud sambhalti hai: upar se neeche)
   let scanTimer = null;
   function scan() {
+    // lazy URL download se mana (403) hua tha, ab image page par load ho gayi: is baar seedha usi se
+    for (const img of gaveUp) if (loaded(img)) { gaveUp.delete(img); tries.delete(img); seen.delete(img); }
     document.querySelectorAll("img").forEach(enqueue);
   }
 
@@ -263,6 +267,11 @@
   }
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg.type === "progress") {
+      const done = [...originals.keys()].filter((i) => i.isConnected).length;
+      sendResponse({ done, total: done + badges.size + gaveUp.size, failed: gaveUp.size });
+      return;
+    }
     if (msg.type === "toggleOriginal") {
       sendResponse({ showOriginal: toggleOriginal() });
       return;

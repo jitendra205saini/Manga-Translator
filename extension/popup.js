@@ -56,6 +56,20 @@ const $ = (id) => document.getElementById(id);
     await chrome.storage.local.set({ sites: cur });
   };
 
+  // is chapter ki progress: kitne page ho gaye
+  async function progress() {
+    try {
+      const p = await chrome.tabs.sendMessage(tab.id, { type: "progress" });
+      if (!p || !p.total) { $("prog").style.display = "none"; return; }
+      $("prog").style.display = "block";
+      $("progbar").style.width = Math.round(100 * p.done / p.total) + "%";
+      $("progtxt").textContent = p.done >= p.total ? `Chapter done: ${p.done} pages` :
+        `${p.done} / ${p.total} pages translated` + (p.failed ? ` (${p.failed} will retry)` : "");
+    } catch (e) { $("prog").style.display = "none"; }
+  }
+  progress();
+  setInterval(progress, 1000);
+
   // server status
   try {
     const r = await (await fetch("http://127.0.0.1:7860/health")).json();

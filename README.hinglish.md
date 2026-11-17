@@ -276,7 +276,7 @@ Debug ke liye server log mein har page ki language, kaunsa provider chala aur ha
 - [x] Sound effects mote comic style mein (धड़ाम!, थप!)
 - [x] Popup mein aaj ka hisaab aur Gemini quota
 - [x] Japanese ke liye `manga-ocr` (ONNX, bina PyTorch): khada text, furigana, stylish font
-- [ ] Korean / Chinese ke liye PaddleOCR
+- [x] Korean / Chinese ke liye PaddleOCR v5
 - [x] Signed Firefox add-on (hamesha installed, `installer/signed/manga-translator.xpi`)
 
 ## License

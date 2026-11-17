@@ -277,7 +277,7 @@ gender (`m` / `f` / `u`). The original and translated versions of the last 40 pa
 - [x] Sound effects in bold comic style (धड़ाम!, थप!)
 - [x] Today's usage and Gemini quota in the popup
 - [x] `manga-ocr` (ONNX, no PyTorch) for Japanese: vertical text, furigana, stylized fonts
-- [ ] PaddleOCR for Korean / Chinese
+- [x] PaddleOCR v5 for Korean / Chinese
 - [x] Signed Firefox add-on (permanent install, `installer/signed/manga-translator.xpi`)
 
 ## License
