@@ -143,7 +143,13 @@ async function postServer(body) {
 async function handleTranslate(msg, tab) {
   if (!tab || !(await isOn(tab.id))) return { error: "translation is OFF for this tab" };
   const st = await getSettings();
-  const base = { lang: st.lang, fast: !!st.fast, page_url: tab.url || "" };
+  const base = { lang: st.lang, fast: !!st.fast, page_url: tab.url || "", url: msg.url || "", fresh: !!msg.fresh };
+
+  // agla chapter pehle se translate ho chuka: download/upload ke bina seedha
+  if (msg.url && !msg.fresh && !msg.prefetch) {
+    const r = await postServer({ ...base, cacheOnly: true });
+    if (r && r.image) return r;
+  }
 
   // 1) content script ne canvas se image di
   if (msg.image) return postServer({ ...base, image: msg.image });
@@ -175,8 +181,30 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     isOn(tab?.id).then((on) => sendResponse({ on }));
     return true;
   }
+  if (msg.type === "prefetch") {
+    // ek-ek karke, peeche (asli pages ki jagah na le)
+    (async () => {
+      for (const u of msg.urls || []) {
+        await handleTranslate({ src: u, url: u, prefetch: true }, tab).catch(() => {});
+      }
+    })();
+    sendResponse({ ok: true });
+    return;
+  }
   if (msg.type === "translate") {
     handleTranslate(msg, tab).then(sendResponse).catch((e) => sendResponse({ error: String(e) }));
     return true;
   }
+});
+
+// right-click: "Translate this page again" (galat bana ho to cache chhod ke naya)
+function makeMenu() {
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({ id: "mt-redo", title: "Translate this page again", contexts: ["image"] });
+  });
+}
+chrome.runtime.onInstalled.addListener(makeMenu);
+chrome.runtime.onStartup.addListener(makeMenu);
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId === "mt-redo" && tab) chrome.tabs.sendMessage(tab.id, { type: "redo", srcUrl: info.srcUrl }).catch(() => {});
 });

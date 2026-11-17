@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
   "name": "Local Manga Translator (Hindi)",
-  "version": "2.6.0",
+  "version": "2.6.1",
   "description": "Translates manga and manhwa pages into casual Hindi using a local server (Gemini / Groq / NLLB).",
   "permissions": [
     "activeTab",
     "storage",
     "scripting",
     "tabs",
-    "declarativeNetRequestWithHostAccess"
+    "declarativeNetRequestWithHostAccess",
+    "contextMenus"
   ],
   "host_permissions": [
     "<all_urls>",
@@ -61,7 +62,9 @@
       "id": "manga-translator-hindi@local",
       "strict_min_version": "128.0",
       "data_collection_permissions": {
-        "required": ["websiteContent"]
+        "required": [
+          "websiteContent"
+        ]
       }
     }
   },

@@ -114,7 +114,11 @@
       const timeout = new Promise((r) => setTimeout(() => r("timeout"), 180000));
       Promise.race([processImage(img), timeout]).then((r) => {
         if (r === "timeout") { console.warn("[manga-tr] timeout", img.src); retryLater(img); }
-      }).finally(() => { active--; pump(); });
+      }).finally(() => {
+        active--;
+        pump();
+        if (!active && !queue.length && !badges.size && originals.size >= 3) prefetchNext();
+      });
     }
   }
 
@@ -133,6 +137,69 @@
     if (n > 3) { console.warn("[manga-tr] 3 baar fail, tab par wapas aane par dobara", img.src); gaveUp.add(img); badge(img, null); return; }
     badge(img, "wait");
     setTimeout(() => { seen.delete(img); if (on) enqueue(img); }, [15000, 45000, 90000][n - 1]);
+  }
+
+  // ---------- right-click "dobara translate": cache chhod ke naya ----------
+  const fresh = new WeakSet();
+  function redo(srcUrl) {
+    const img = [...document.images].find((i) => i.src === srcUrl || i.currentSrc === srcUrl);
+    if (!img) return false;
+    const o = originals.get(img);
+    if (o) {
+      if (o.srcset) img.setAttribute("srcset", o.srcset);
+      for (const a in o.lazyAttrs || {}) img.setAttribute(a, o.lazyAttrs[a]);
+      originals.delete(img);
+      img.src = o.src;
+    }
+    delete img.dataset.mtDone;
+    seen.delete(img);
+    tries.delete(img);
+    gaveUp.delete(img);
+    fresh.add(img);
+    const go = () => enqueue(img);
+    if (img.complete && img.naturalWidth) setTimeout(go, 50);
+    else img.addEventListener("load", go, { once: true });
+    return true;
+  }
+
+  // ---------- agla chapter: is chapter ke saare page ho gaye to agle ke pehle 4 pehle se ----------
+  let prefetched = false;
+  const NEXT_TXT = /^\s*(next|next chapter|next chap|ch\.? ?next|다음|다음 화|下一[章话話页]|अगला)\s*[>»→›]*\s*$/i;
+  function nextChapterUrl() {
+    const rel = document.querySelector('a[rel="next"][href], link[rel="next"][href]');
+    if (rel) return rel.href;
+    for (const a of document.querySelectorAll("a[href]")) {
+      const t = (a.textContent || a.getAttribute("title") || a.getAttribute("aria-label") || "").trim();
+      if (NEXT_TXT.test(t) || /next[-_ ]?chap/i.test(a.className + " " + a.id)) return a.href;
+    }
+    return null;
+  }
+  async function prefetchNext() {
+    if (prefetched || !on) return;
+    const href = nextChapterUrl();
+    if (!href || href === location.href || new URL(href).origin !== location.origin) return;
+    prefetched = true;
+    try {
+      const html = await (await fetch(href, { credentials: "include" })).text();
+      const doc = new DOMParser().parseFromString(html, "text/html");
+      const urls = [];
+      for (const i of doc.querySelectorAll("img")) {
+        let u = null;
+        for (const a of [...LAZY, "src"]) {
+          const v = (i.getAttribute(a) || "").trim();
+          if (/^(https?:)?\/\//.test(v) || (a === "src" && v && !v.startsWith("data:"))) { u = new URL(v, href).href; break; }
+        }
+        if (!u || /logo|icon|avatar|banner|ads?[/_-]|sprite|\.gif(\?|$)|\.svg(\?|$)/i.test(u)) continue;
+        const w = +i.getAttribute("width") || 0;
+        if (w && w < 300) continue;
+        if (!urls.includes(u)) urls.push(u);
+        if (urls.length >= 4) break;
+      }
+      if (urls.length) {
+        console.log("[manga-tr] agla chapter pehle se:", urls.length, "pages");
+        chrome.runtime.sendMessage({ type: "prefetch", urls }).catch(() => {});
+      }
+    } catch (e) { console.warn("[manga-tr] prefetch fail", e); }
   }
 
   // Tarika 0: same-origin image ho to seedha canvas se
@@ -162,7 +229,8 @@
     badge(img, "work");
     let ok = false;
     try {
-      const msg = { type: "translate", image: lazy ? null : canvasBase64(img) };
+      const msg = { type: "translate", image: lazy ? null : canvasBase64(img), fresh: fresh.delete(img) };
+      if (/^https?:/.test(src)) msg.url = src;  // agla chapter pehle se translate hua ho to seedha cache
       if (lazy) {
         msg.src = lazy;
         if ((tries.get(img) || 0) >= 1) { gaveUp.add(img); badge(img, "wait"); return; }  // 403: load hone ka intezaar
@@ -267,6 +335,10 @@
   }
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg.type === "redo") {
+      sendResponse({ ok: on && redo(msg.srcUrl) });
+      return;
+    }
     if (msg.type === "progress") {
       const done = [...originals.keys()].filter((i) => i.isConnected).length;
       sendResponse({ done, total: done + badges.size + gaveUp.size, failed: gaveUp.size });

@@ -66,6 +66,8 @@ class TranslateRequest(BaseModel):
     lang: str = "Auto"
     page_url: str = ""
     fast: bool = False   # Fast mode: Groq pehle
+    url: str = ""        # page ki asli image URL: agla chapter pehle se translate ho to seedha cache se
+    fresh: bool = False  # "dobara translate karo": cache mat dekho
 
 
 def download_image(url, referer):
@@ -139,13 +141,17 @@ async def set_config(request: Request):
 @app.post("/translate")
 async def translate(req: TranslateRequest):
     try:
+        if req.url and not req.fresh:
+            hit = translator.url_cached(req.url, req.lang)
+            if hit:
+                return hit
         if req.image:
             raw = base64.b64decode(req.image.split(",", 1)[-1])
         elif req.src.startswith(("http://", "https://")):
             raw = await asyncio.to_thread(download_image, req.src, req.page_url)
         else:
             return {"error": "image ya src nahi mila"}
-        return await translator.translate_page(raw, req.lang, req.page_url, req.fast)
+        return await translator.translate_page(raw, req.lang, req.page_url, req.fast, req.url, req.fresh)
     except Exception as e:
         traceback.print_exc()
         return {"error": str(e)}

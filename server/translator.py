@@ -215,19 +215,66 @@ def save_debug(img, out):
         print("[debug] save fail:", e)
 
 
-async def translate_page(raw, lang_choice="Auto", page_url="", fast=False):
-    key = hashlib.md5(raw).hexdigest() + "_" + lang_choice + "_" + CACHE_VERSION
+def _url_key(url, lang_choice):
+    return "u" + hashlib.md5(url.encode("utf-8", "ignore")).hexdigest() + "_" + lang_choice + "_" + CACHE_VERSION
+
+
+def _cached(key):
     if key in _cache:
         _cache.move_to_end(key)
-        llm.usage_bump("cached")
         return _cache[key]
     disk = _disk_get(key)
     if disk:
-        print(f"[cache] disk se mila ({disk.get('bubbles')} bubbles)")
         _cache[key] = disk
-        llm.usage_bump("cached")
-        return disk
+        if len(_cache) > MAX_CACHE:
+            _cache.popitem(last=False)
+    return disk
 
+
+def url_cached(url, lang_choice="Auto"):
+    """Isi image URL ka translation pehle ho chuka (jaise agla chapter pehle se)? Download bhi nahi karna padta."""
+    hit = _cached(_url_key(url, lang_choice)) if url else None
+    if hit:
+        print("[cache] URL se mila (pehle se translate)")
+        llm.usage_bump("cached")
+    return hit
+
+
+_inflight = {}  # key -> Future: ek hi page do baar aaye (prefetch + asli) to ek hi baar translate
+
+
+async def translate_page(raw, lang_choice="Auto", page_url="", fast=False, url="", fresh=False):
+    key = hashlib.md5(raw).hexdigest() + "_" + lang_choice + "_" + CACHE_VERSION
+    ukey = _url_key(url, lang_choice) if url else None
+    if not fresh:
+        hit = _cached(key)
+        if hit:
+            llm.usage_bump("cached")
+            if ukey:
+                _cache[ukey] = hit
+            return hit
+        if key in _inflight:
+            return await asyncio.shield(_inflight[key])
+    fut = asyncio.get_running_loop().create_future()
+    _inflight[key] = fut
+    try:
+        result = await _translate_page(raw, key, lang_choice, page_url, fast)
+        if not fut.done():
+            fut.set_result(result)
+    except BaseException as e:
+        if not fut.done():
+            fut.set_exception(e)
+            fut.exception()  # "never retrieved" warning na aaye
+        raise
+    finally:
+        _inflight.pop(key, None)
+    if ukey and result.get("image"):
+        _cache[ukey] = result
+        _disk_put(ukey, result)
+    return result
+
+
+async def _translate_page(raw, key, lang_choice, page_url, fast):
     t0 = time.time()
     img = Image.open(io.BytesIO(raw)).convert("RGB")
 
