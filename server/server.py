@@ -86,7 +86,12 @@ def download_image(url, referer):
 @app.get("/health")
 async def health():
     gpu_lost = detector._cpu_only or mangaocr._cpu_only  # GPU toota, CPU par chal raha: tray restart karega
-    return {"ok": True, "gpu_lost": gpu_lost, "providers": llm.provider_status(), "usage": llm.usage_today()}
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "version.txt"), encoding="utf-8") as f:
+            ver = f.read().strip()
+    except Exception:
+        ver = ""
+    return {"ok": True, "version": ver, "gpu_lost": gpu_lost, "providers": llm.provider_status(), "usage": llm.usage_today()}
 
 
 HERE = os.path.dirname(os.path.abspath(__file__))

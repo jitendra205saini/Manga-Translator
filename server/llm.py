@@ -178,8 +178,26 @@ _usage_lock = threading.Lock()
 _usage = None
 
 
+def _pacific_now():
+    # Google ki daily free limit Pacific time ki raat 12 baje reset hoti hai (India: dopahar 1:30 / 12:30)
+    import datetime as _dt
+    try:
+        from zoneinfo import ZoneInfo
+        return _dt.datetime.now(ZoneInfo("America/Los_Angeles"))
+    except Exception:
+        return _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=-8)))
+
+
 def _today():
-    return time.strftime("%Y-%m-%d")
+    return _pacific_now().strftime("%Y-%m-%d")
+
+
+def reset_in():
+    """Google ki daily limit kitne second baad reset hogi."""
+    import datetime as _dt
+    now = _pacific_now()
+    nxt = (now + _dt.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    return int((nxt - now).total_seconds())
 
 
 def usage_bump(key, n=1):
@@ -191,8 +209,8 @@ def usage_bump(key, n=1):
                     _usage = json.load(f)
             except Exception:
                 _usage = {}
-        if _usage.get("date") != _today():
-            _usage = {"date": _today()}
+        if _usage.get("date") != _today() or _usage.get("tz") != "pt":
+            _usage = {"date": _today(), "tz": "pt"}  # "tz": purani (India-date wali) ginti ek baar reset
         if n:
             _usage[key] = _usage.get(key, 0) + n
             try:
@@ -206,6 +224,7 @@ def usage_today():
     usage_bump("_", 0)
     cfg = load_config()
     out = dict(_usage)
+    out["reset_in"] = reset_in()
     out["gemini_limit"] = int(cfg["gemini"].get("daily_limit", 500)) * max(1, len(gemini_keys(cfg)))
     return out
 

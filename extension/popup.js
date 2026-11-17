@@ -70,7 +70,11 @@ const $ = (id) => document.getElementById(id);
   progress();
   setInterval(progress, 1000);
 
-  // server status
+  const extVer = chrome.runtime.getManifest().version;
+  $("ver").textContent = "v" + extVer;
+  // server status: jawab na aaye to "start ho raha hai" dikhao aur har 2s dobara dekho
+  const opened = Date.now();
+  async function serverStatus() {
   try {
     const r = await (await fetch("http://127.0.0.1:7860/health")).json();
     const lines = Object.entries(r.providers || {}).filter(([, s]) => s !== "not installed").map(([p, s]) =>
@@ -82,11 +86,20 @@ const $ = (id) => document.getElementById(id);
     const usage = `<div class="usage"><b>Today</b>: ${u.pages || 0} pages translated` +
       (u.cached ? `, ${u.cached} from cache` : "") +
       `<br>Gemini: ${gUsed} of ~${gLim} requests (${Math.max(0, gLim - gUsed)} left)` +
+        (u.reset_in ? `<br>Resets at ${new Date(Date.now() + u.reset_in * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} (in ${Math.floor(u.reset_in / 3600)}h ${Math.floor(u.reset_in % 3600 / 60)}m)` : "") +
       (u.groq ? `<br>Groq: ${u.groq} requests` : "") + `</div>`;
-    $("status").innerHTML = `<div class="ok">Server running</div>` + lines.join("") + usage +
+    $("status").innerHTML = `<div class="ok">Server running${r.version ? " (v" + r.version + ")" : ""}</div>` +
+      (r.version && r.version !== extVer ? `<div class="bad">Version mismatch: extension v${extVer}, server v${r.version}. Update the older one.</div>` : "") + lines.join("") + usage +
       `<div><a href="#" id="keys">${noKey ? "<b>Add API key (required)</b>" : "Change API keys"}</a></div>`;
     $("keys").onclick = (e) => { e.preventDefault(); chrome.tabs.create({ url: "http://127.0.0.1:7860/setup" }); };
   } catch (e) {
-    $("status").innerHTML = `<span class="bad">Server is not running. Open 'Manga Translator' from the Start menu or desktop.</span>`;
+    const waited = Math.round((Date.now() - opened) / 1000);
+    $("status").innerHTML = waited < 45
+      ? `<span class="starting"><i class="spin"></i>Server starting… please wait (${waited}s)</span>`
+      : `<span class="bad">Server is not running. Open 'Manga Translator' from the Start menu or desktop.</span>` +
+        `<div style="opacity:.7">Still checking every 2 seconds…</div>`;
+    setTimeout(serverStatus, 2000);
   }
+  }
+  serverStatus();
 })();
