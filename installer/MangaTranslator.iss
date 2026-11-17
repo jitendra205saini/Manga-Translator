@@ -1,6 +1,6 @@
 ; Inno Setup script. Build: installer\build.bat  ->  installer\Output\MangaTranslator-Setup.exe
 #define AppName "Manga Translator"
-#define AppVersion "2.6.5"
+#define AppVersion "2.7.0"
 #define Root ".."
 
 [Setup]
@@ -50,7 +50,7 @@ Type: files; Name: "{userstartup}\Manga Translator server.lnk"
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\python\pythonw.exe"; Parameters: """{app}\server\tray.py"""; \
   WorkingDir: "{app}\server"; IconFilename: "{app}\extension\icons\icon.ico"
-Name: "{group}\API keys"; Filename: "http://127.0.0.1:7860/setup"; IconFilename: "{app}\extension\icons\icon.ico"
+Name: "{group}\API keys"; Filename: "http://127.0.0.1:47391/setup"; IconFilename: "{app}\extension\icons\icon.ico"
 Name: "{group}\Add extension to browser"; Filename: "{app}\installer\browser.html"
 Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
 Name: "{userdesktop}\{#AppName}"; Filename: "{app}\python\pythonw.exe"; Parameters: """{app}\server\tray.py"""; \

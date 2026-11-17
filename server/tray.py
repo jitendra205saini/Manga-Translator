@@ -13,7 +13,7 @@ import webbrowser
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 APP = os.path.dirname(HERE)
-URL = "http://127.0.0.1:7860"
+URL = "http://127.0.0.1:47391"
 REPO = "jitendra205saini/Manga-Translator"
 VERSION = open(os.path.join(HERE, "version.txt"), encoding="utf-8").read().strip()
 ICON = os.path.join(APP, "extension", "icons", "icon48.png")
@@ -54,7 +54,7 @@ def start_server():
 
 
 def stop_server():
-    ps = ("Get-NetTCPConnection -LocalPort 7860 -State Listen -EA SilentlyContinue | "
+    ps = ("Get-NetTCPConnection -LocalPort 47391 -State Listen -EA SilentlyContinue | "
           "% { Stop-Process -Id $_.OwningProcess -Force }")
     subprocess.run(["powershell", "-NoProfile", "-Command", ps], creationflags=0x08000000)
 

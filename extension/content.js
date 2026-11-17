@@ -37,7 +37,107 @@
     if (img.loading === "lazy" && /^https?:/.test(img.src)) return img.src;
     return null;
   }
-  const loaded = (img) => img.complete && img.naturalWidth >= MIN_W && img.naturalHeight >= MIN_H;
+  // ---------- webtoon: site ne lambi image tukdon mein kaati, bubble do tukdon mein bat jaata hai ----------
+  // upar/neeche chipke hue (same chaudai) tukde dhoondho, unhe saath bhejo
+  function adjacent(cur, dir) {
+    const r = cur.getBoundingClientRect();
+    if (r.height < 5) return null;
+    let best = null, bg = 1e9;
+    for (const i of document.images) {
+      if (i === cur) continue;
+      const q = i.getBoundingClientRect();
+      if (q.height < 5 || Math.abs(q.width - r.width) > 0.15 * r.width) continue;
+      if (Math.min(q.right, r.right) - Math.max(q.left, r.left) < 0.5 * r.width) continue;
+      const gap = dir > 0 ? q.top - r.bottom : r.top - q.bottom;
+      if (gap > -5 && gap < 40 && gap < bg) { bg = gap; best = i; }
+    }
+    return best;
+  }
+  function origSrc(nb) {
+    const o = originals.get(nb);
+    const s = o ? o.src : nb.currentSrc || nb.src;
+    try { return new URL(s, location.href).href; } catch (e) { return null; }
+  }
+  function stack(img, dir) {
+    const out = [];
+    let cur = img, tot = 0;
+    for (let k = 0; k < 4; k++) {
+      const nb = adjacent(cur, dir);
+      if (!nb || !nb.complete || !nb.naturalWidth) break;
+      const src = origSrc(nb);
+      if (!src || !/^https?:/.test(src)) break;
+      out.push({ img: nb, src, w: nb.naturalWidth, h: nb.naturalHeight });
+      tot += nb.naturalHeight * img.naturalWidth / nb.naturalWidth;
+      if (tot >= 500) break;
+      cur = nb;
+    }
+    return out;
+  }
+  const inStack = (img) => !!(adjacent(img, 1) || adjacent(img, -1));
+
+  // padosi ka kata bubble is page par: target img -> Map(source img -> [{url, rects, y0, s}])
+  const spills = new Map();
+  function addSpills(res, own, prev, next) {
+    if (!res.spill || !res.ctx) return;
+    const W = own.naturalWidth;
+    const touched = new Set();
+    for (const sp of res.spill) {
+      const isPrev = sp.dir === "prev";
+      const url = "data:image/png;base64," + sp.patch;
+      const list = (isPrev ? prev : next).slice(0, res.ctx[isPrev ? 0 : 1]);
+      const hs = list.map((n) => Math.max(1, Math.round(n.h * W / n.w)));
+      let acc = 0;
+      list.forEach((n, k) => {
+        if (!spills.has(n.img)) spills.set(n.img, new Map());
+        const m = spills.get(n.img);
+        // ek source ka ek hi (taaza) patch: redo par purana hata do
+        const arr = (touched.has(n.img) ? m.get(own) : null) || [];
+        // next: patch upar se, paas wala tukda sabse upar. prev: y0 compose mein patch ki oonchai se
+        arr.push({ url, rects: sp.rects, s: n.w / W, y0: isPrev ? null : acc, stackHs: hs, idx: k });
+        m.set(own, arr);
+        touched.add(n.img);
+        acc += hs[k];
+      });
+    }
+    for (const t of touched) compose(t);
+  }
+  const loadImg = (u) => new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = u; });
+  async function compose(t) {
+    const o = originals.get(t), m = spills.get(t);
+    if (!o || !o.base || !m || !m.size) return;
+    const tok = (o.tok = (o.tok || 0) + 1);
+    try {
+      const base = await loadImg(o.base);
+      const c = document.createElement("canvas");
+      c.width = base.naturalWidth;
+      c.height = base.naturalHeight;
+      const ctx = c.getContext("2d");
+      ctx.drawImage(base, 0, 0);
+      for (const arr of m.values()) for (const sp of arr) {
+        const p = await loadImg(sp.url);
+        let y0 = sp.y0;
+        if (y0 == null) {
+          // prev: patch ke neeche se ginti; paas wala tukda (idx 0) sabse neeche
+          let acc = p.naturalHeight;
+          for (let k = 0; k <= sp.idx; k++) acc -= sp.stackHs[k];
+          y0 = acc;
+        }
+        const th = c.height / sp.s;  // target ki oonchai patch ke scale mein
+        for (const [x0, ry0, x1, ry1] of sp.rects) {
+          const a = Math.max(ry0, y0), b = Math.min(ry1, y0 + th);
+          if (b <= a) continue;
+          ctx.drawImage(p, x0, a, x1 - x0, b - a, x0 * sp.s, (a - y0) * sp.s, (x1 - x0) * sp.s, (b - a) * sp.s);
+        }
+      }
+      if (tok !== o.tok || !originals.has(t)) return;
+      o.hindi = c.toDataURL("image/png");
+      for (const a in o.lazyAttrs || {}) t.setAttribute(a, o.hindi);
+      if (!showOriginal) t.src = o.hindi;
+    } catch (e) { console.warn("[manga-tr] spill compose fail", e); }
+  }
+
+  const loaded = (img) => img.complete && img.naturalWidth >= MIN_W &&
+    (img.naturalHeight >= MIN_H || (img.naturalHeight >= 40 && inStack(img)));
 
   function isCandidate(img) {
     if (img.dataset.mtDone || seen.has(img)) return false;
@@ -245,6 +345,9 @@
     let ok = false;
     try {
       const msg = { type: "translate", image: lazy ? null : canvasBase64(img), fresh: fresh.delete(img) };
+      const prev = lazy ? [] : stack(img, -1), next = lazy ? [] : stack(img, 1);
+      msg.prev = prev.map((n) => ({ src: n.src }));
+      msg.next = next.map((n) => ({ src: n.src }));
       if (/^https?:/.test(src)) msg.url = src;  // agla chapter pehle se translate hua ho to seedha cache
       if (lazy) {
         msg.src = lazy;
@@ -269,10 +372,13 @@
         img.dataset.mtDone = "1";
         const hindi = "data:image/png;base64," + res.image;
         originals.get(img).hindi = hindi;
+        originals.get(img).base = hindi;
         // site ka lazy-loader baad mein original wapas na laga de
         for (const a in lazyAttrs) img.setAttribute(a, hindi);
         if (!showOriginal) img.src = hindi;
         ok = true;
+        addSpills(res, img, prev, next);
+        compose(img);
       } else if (res && res.retry_after) {
         // AI ki free limit khatam: page par saaf batao, limit khulte hi apne aap (tries nahi ginte)
         limitUntil = Math.max(limitUntil, Date.now() + res.retry_after * 1000);

@@ -8,7 +8,7 @@
 
 Japanese · Korean · Chinese · English → हिन्दी
 
-<a href="https://github.com/jitendra205saini/Manga-Translator/releases/tag/v2.0.0"><img alt="version" src="https://img.shields.io/badge/version-v2.0.0-blue"></a>
+<a href="https://github.com/jitendra205saini/Manga-Translator/releases/latest"><img alt="version" src="https://img.shields.io/badge/version-v2.7.0-blue"></a>
 <a href="https://www.python.org/downloads/"><img alt="python" src="https://img.shields.io/badge/python-3.13-3776AB?logo=python&logoColor=white"></a>
 <a href="https://github.com/jitendra205saini/Manga-Translator/blob/main/README.md#requirements"><img alt="platform" src="https://img.shields.io/badge/platform-Windows%2011-0078D6?logo=windows&logoColor=white"></a>
 <a href="https://github.com/jitendra205saini/Manga-Translator/blob/main/README.md#installation"><img alt="firefox" src="https://img.shields.io/badge/Firefox-supported-FF7139?logo=firefoxbrowser&logoColor=white"></a>
@@ -33,6 +33,12 @@ Japanese · Korean · Chinese · English → हिन्दी
 | <img src="docs/demo_before.png" width="420"> | <img src="docs/demo_after.png" width="420"> |
 
 *Demo page made for this README. The speaker on the left is a girl ("थक गई"), on the right a boy ("छोड़ दूंगा").*
+
+| Webtoon: split bubble, before | After |
+|---|---|
+| <img src="docs/webtoon_before.jpg" width="420"> | <img src="docs/webtoon_after.jpg" width="420"> |
+
+*A real webtoon page that the site split into separate images. Three bubbles cross the cut; each is read whole and drawn back across both images.*
 
 </div>
 
@@ -59,8 +65,16 @@ uses the correct gender: a girl says *"मैं थक गई"*, a boy says *"�
 | **Clean typesetting** | Erases only the text pixels, rebuilds artwork with LaMa inpainting and fits Hindi to the bubble shape in a comic-style font |
 | **Fallback chain** | Gemini → Groq (Qwen vision model, also sees the image) → local NLLB, so reading never stops when a free limit runs out |
 | **Firefox & Chrome** | Manifest V3 extension that works on any site, with an "Always on for this site" option |
-| **Fast reading** | Prefetches upcoming pages, translates 3 pages in parallel, erases text while the AI is answering, remembers each series' language and caches results on disk |
+| **Fast reading** | Prefetches upcoming pages, translates 5 pages in parallel, erases text while the AI is answering, remembers each series' language and caches results on disk |
 | **Saves free quota** | Sends up to 3 pages in one AI request, so the free daily limit covers about 3 times more pages |
+| **Whole chapter, in order** | Translates every page from the top of the chapter to the bottom, wherever you scroll, with a loading overlay on each page that is still waiting |
+| **Keeps going in the background** | Carries on when you switch to another tab |
+| **Webtoon strips** | Sites that cut a long strip into many images often split a speech bubble in two. The extension sends the strips above and below too, so a split bubble is read whole and drawn back across both images |
+| **Better Korean / Chinese OCR** | PaddleOCR v5 (ONNX) reads Korean and Chinese; Japanese uses manga-ocr |
+| **Next chapter ready** | When a chapter is done, the first pages of the next chapter are translated in advance |
+| **Translate again** | Right-click a page and choose **Translate this page again** to skip the cache |
+| **Clear limit messages** | When every free AI limit is used up, each page shows when it will resume and continues on its own; the popup shows today's usage and when Google resets it |
+| **Several Gemini keys** | Add more than one key, separated by commas; a key that hits its limit rests and the next one is used |
 | **Original / Hindi toggle** | Press **Alt+O** to flip every page back to the original and again to Hindi |
 | **Local first** | Runs on `127.0.0.1`. API keys stay on your PC and are never committed |
 
@@ -70,36 +84,37 @@ uses the correct gender: a girl says *"मैं थक गई"*, a boy says *"�
 flowchart LR
     subgraph B[Browser extension]
         direction TB
-        B1[Manga page<br/>Firefox / Chrome] --> B2[content.js<br/>finds pages, 3 at a time]
-        B2 --> B3[background.js<br/>fetches the image]
+        B1[Manga page<br/>Firefox / Chrome] --> B2[content.js<br/>whole chapter, top to bottom<br/>5 pages at a time + loading overlay]
+        B2 --> B3[background.js<br/>page + webtoon strips above / below<br/>keeps going in a background tab]
     end
 
-    subgraph S[Local server :7860]
+    subgraph S[Local server :47391]
         direction TB
-        S1{Cached?} -->|no| S2[Windows OCR<br/>text + language]
-        S2 --> S3[ML detector<br/>bubbles + text boxes]
-        S3 --> S4[Batcher<br/>up to 3 pages]
+        S1{Cached?<br/>image hash or URL} -->|no| S2[Stitch neighbour strips]
+        S2 --> S3[OCR<br/>Windows OCR · PaddleOCR ko/zh<br/>manga-ocr ja]
+        S3 --> S4[ML detector<br/>bubbles + text boxes]
+        S4 --> S5[Bubble belongs to the page<br/>holding its centre]
+        S5 --> S6[Batcher<br/>up to 3 pages]
     end
 
     subgraph A[AI translation]
         direction TB
-        A1[Gemini Flash-Lite<br/>images + numbered boxes] -.->|limit / error| A2[Groq<br/>Qwen vision]
+        A1[Gemini Flash-Lite<br/>several keys, rotated] -.->|limit / error| A2[Groq<br/>vision model]
         A2 -.->|fails| A3[Local NLLB]
     end
 
     subgraph R[Typesetting]
         direction TB
-        R1{Text in a bubble?} -->|yes| R2[Erase text pixels]
-        R1 -->|no| R3[LaMa inpainting]
-        R2 --> R4[Fit Hindi to the bubble<br/>Baloo 2 + raqm]
-        R3 --> R4
+        R1[Erase text + LaMa] --> R2[Fit Hindi to the bubble<br/>Baloo 2 + raqm]
+        R2 --> R3[Cut out own page +<br/>patches for neighbours]
     end
 
     B3 --> S1
-    S4 --> A1
+    S6 --> A1
     A1 --> R1
-    R4 -->|translated image| B1
-    S1 -->|yes| B1
+    R3 -->|page + patches| B2
+    S1 -->|yes| B2
+    A1 -.->|all limits used: retry_after| B2
 ```
 
 Each translated page is cached on disk, and character genders are remembered per series in `memory.json`.
@@ -111,7 +126,7 @@ Press **Alt+O** to switch between the original and the Hindi page.
 |---|---|
 | Browser extension | JavaScript, Manifest V3 (Firefox 128+ / Chrome) |
 | Server | Python 3.13, FastAPI, Uvicorn |
-| OCR | Windows 11 built-in OCR (`winrt`), `manga-ocr` ONNX for Japanese |
+| OCR | Windows 11 built-in OCR (`winrt`), `manga-ocr` ONNX for Japanese, PaddleOCR v5 ONNX for Korean / Chinese |
 | Bubble / text detection | `ogkalu/comic-text-and-bubble-detector` (RT-DETR-v2, ONNX Runtime + DirectML), OpenCV fallback |
 | Inpainting | LaMa (`Carve/LaMa-ONNX`), OpenCV fallback |
 | Translation | Google Gemini Flash-Lite, Groq (`openai/gpt-oss-120b`), Meta NLLB-200 600M (offline) |

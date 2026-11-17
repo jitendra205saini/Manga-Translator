@@ -174,7 +174,7 @@ def _manga_ocr(img, dets, lines, lang):
 
 # ---------- disk cache (server band hone par bhi yaad) ----------
 CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache")
-CACHE_VERSION = "v8"
+CACHE_VERSION = "v9"
 
 
 def _disk_get(key):
@@ -243,8 +243,14 @@ def url_cached(url, lang_choice="Auto"):
 _inflight = {}  # key -> Future: ek hi page do baar aaye (prefetch + asli) to ek hi baar translate
 
 
-async def translate_page(raw, lang_choice="Auto", page_url="", fast=False, url="", fresh=False):
+async def translate_page(raw, lang_choice="Auto", page_url="", fast=False, url="", fresh=False,
+                         prev_raws=None, next_raws=None):
     key = hashlib.md5(raw).hexdigest() + "_" + lang_choice + "_" + CACHE_VERSION
+    if prev_raws or next_raws:  # padosi tukdon ke saath: kata bubble poora
+        h = hashlib.md5()
+        for r in (prev_raws or []) + [b"|"] + (next_raws or []):
+            h.update(hashlib.md5(r).digest())
+        key += "_n" + h.hexdigest()[:12]
     ukey = _url_key(url, lang_choice) if url else None
     if not fresh:
         hit = _cached(key)
@@ -258,7 +264,7 @@ async def translate_page(raw, lang_choice="Auto", page_url="", fast=False, url="
     fut = asyncio.get_running_loop().create_future()
     _inflight[key] = fut
     try:
-        result = await _translate_page(raw, key, lang_choice, page_url, fast)
+        result = await _translate_page(raw, key, lang_choice, page_url, fast, prev_raws, next_raws)
         if not fut.done():
             fut.set_result(result)
     except BaseException as e:
@@ -274,9 +280,65 @@ async def translate_page(raw, lang_choice="Auto", page_url="", fast=False, url="
     return result
 
 
-async def _translate_page(raw, key, lang_choice, page_url, fast):
+SEAM_CTX = 500  # padosi page ka kitna hissa saath jode (px, is page ki chaudai par)
+
+
+def _b64png(im):
+    buf = io.BytesIO()
+    im.save(buf, format="PNG", compress_level=1)
+    return base64.b64encode(buf.getvalue()).decode()
+
+
+def _stitch(img, prev_raws, next_raws):
+    """Webtoon: site ne lambi image ko tukdon mein kaata, bubble do tukdon mein bat jaata hai.
+    Upar wale tukdon ka neeche ka hissa + ye page + neeche walon ka upar ka hissa jodo.
+    prev_raws / next_raws: paas wala pehle. Lautao (image, L, R, kitne upar wale, kitne neeche wale)."""
+    W, h = img.size
+
+    def chain(raws):
+        out, tot = [], 0
+        for raw in raws or []:
+            try:
+                n = Image.open(io.BytesIO(raw)).convert("RGB")
+            except Exception:
+                break
+            if abs(n.width - W) > 0.15 * W:  # alag chaudai: ek hi patti ke tukde nahi
+                break
+            if n.width != W:
+                n = n.resize((W, max(1, round(n.height * W / n.width))))
+            out.append(n)
+            tot += n.height
+            if tot >= SEAM_CTX:
+                break
+        return out, tot
+
+    prev, pt = chain(prev_raws)
+    nxt, nt = chain(next_raws)
+    L, R = min(SEAM_CTX, pt), min(SEAM_CTX, nt)
+    if not L and not R:
+        return img, 0, 0, 0, 0
+    out = Image.new("RGB", (W, L + h + R))
+    y = L - pt  # upar wale tukde: sirf aakhri L px dikhein
+    for part in reversed(prev):
+        out.paste(part, (0, y))
+        y += part.height
+    out.paste(img, (0, L))
+    y = L + h
+    for part in nxt:
+        out.paste(part, (0, y))
+        y += part.height
+    return out, L, R, len(prev), len(nxt)
+
+
+def _region(g):
+    return g.get("bbox") or g["box"]
+
+
+async def _translate_page(raw, key, lang_choice, page_url, fast, prev_raws=None, next_raws=None):
     t0 = time.time()
     img = Image.open(io.BytesIO(raw)).convert("RGB")
+    own_w, own_h = img.size
+    img, L, R, n_prev, n_next = _stitch(img, prev_raws, next_raws)
 
     async with _ocr_lock:
         t_ocr = time.time()
@@ -310,7 +372,13 @@ async def _translate_page(raw, key, lang_choice, page_url, fast):
         groups, lang = await asyncio.to_thread(ml_groups, img, lines, lang)
         if lang == "ja" and lang_choice not in VALID_LANGS:
             _series_lang[skey] = "ja"
-    if not groups:
+    if L or R:
+        # bubble usi page ka jiske andar uska beech hai; padosi wale padosi khud karega
+        groups = [g for g in groups if L <= (_region(g)[1] + _region(g)[3]) / 2 < L + own_h]
+    if not groups and (L or R):
+        # apna koi bubble nahi, par padosi ka kata bubble is par chipkana pad sakta hai: asli image hi lauta do
+        result = {"image": _b64png(img.crop((0, L, own_w, L + own_h))), "lang": lang, "bubbles": 0, "provider": "none"}
+    elif not groups:
         result = {"image": None, "lang": lang, "bubbles": 0}
     else:
         # text mitana (LaMa) aur AI translation saath-saath
@@ -329,19 +397,34 @@ async def _translate_page(raw, key, lang_choice, page_url, fast):
                 raise RuntimeError(f"AI translation fail aur NLLB bhi nahi chala ({e}). Server log dekho.")
         out = await asyncio.to_thread(render_ml, img, groups, hindi, pre)
         save_debug(img, out)
-        buf = io.BytesIO()
-        out.save(buf, format="PNG", compress_level=1)
-        result = {"image": base64.b64encode(buf.getvalue()).decode(), "lang": lang, "bubbles": len(groups), "provider": provider}
+        spill = []
+        if L or R:
+            # jo bubble padosi page tak jaata hai: uska woh hissa padosi par chipkane ke liye
+            P = 10
+            up = [_region(g) for g in groups if _region(g)[1] < L]
+            if up:
+                spill.append({"dir": "prev", "patch": _b64png(out.crop((0, 0, own_w, L))),
+                              "rects": [[max(0, b[0] - P), max(0, b[1] - P), min(own_w, b[2] + P), L] for b in up]})
+            dn = [_region(g) for g in groups if _region(g)[3] > L + own_h]
+            if dn:
+                y0 = L + own_h
+                spill.append({"dir": "next", "patch": _b64png(out.crop((0, y0, own_w, y0 + R))),
+                              "rects": [[max(0, b[0] - P), 0, min(own_w, b[2] + P), min(R, b[3] - y0 + P)] for b in dn]})
+            out = out.crop((0, L, own_w, L + own_h))
+        result = {"image": _b64png(out), "lang": lang, "bubbles": len(groups), "provider": provider}
+        if spill:
+            result["spill"] = spill
+            result["ctx"] = [n_prev, n_next]
         for g, h in zip(groups, hindi):
             print(f"    {g['text']}  ->  {h}")
 
     print(f"[translate] {img.size} lang={lang} via={result.get('provider', '-')} bubbles={result['bubbles']} "
           f"{time.time() - t0:.1f}s (ocr {t_ocr:.1f}s)")
-    if result.get("provider") != "nllb":  # NLLB backup wala result cache nahi, taaki baad mein AI se dobara ho
+    if result.get("provider") not in ("nllb", "none"):  # NLLB backup wala result cache nahi, taaki baad mein AI se dobara ho
         _cache[key] = result
         if result.get("image"):
             await asyncio.to_thread(_disk_put, key, result)
-    if result.get("image"):
+    if result.get("image") and result.get("bubbles"):
         llm.usage_bump("pages")
     if len(_cache) > MAX_CACHE:
         _cache.popitem(last=False)

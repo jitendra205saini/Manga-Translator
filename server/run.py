@@ -10,7 +10,7 @@ sys.path.insert(0, HERE)
 
 s = socket.socket()
 try:
-    s.bind(("127.0.0.1", 7860))
+    s.bind(("127.0.0.1", 47391))
 except OSError:
     sys.exit(0)
 finally:
@@ -21,4 +21,4 @@ sys.stdout = sys.stderr = log
 
 import uvicorn  # noqa: E402
 
-uvicorn.run("server:app", host="127.0.0.1", port=7860, log_config=None)
+uvicorn.run("server:app", host="127.0.0.1", port=47391, log_config=None)

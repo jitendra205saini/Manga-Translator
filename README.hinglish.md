@@ -8,7 +8,7 @@
 
 Japanese · Korean · Chinese · English → हिन्दी
 
-<a href="https://github.com/jitendra205saini/Manga-Translator/releases/tag/v2.0.0"><img alt="version" src="https://img.shields.io/badge/version-v2.0.0-blue"></a>
+<a href="https://github.com/jitendra205saini/Manga-Translator/releases/latest"><img alt="version" src="https://img.shields.io/badge/version-v2.7.0-blue"></a>
 <a href="https://www.python.org/downloads/"><img alt="python" src="https://img.shields.io/badge/python-3.13-3776AB?logo=python&logoColor=white"></a>
 <a href="https://github.com/jitendra205saini/Manga-Translator/blob/main/README.hinglish.md#kya-chahiye"><img alt="platform" src="https://img.shields.io/badge/platform-Windows%2011-0078D6?logo=windows&logoColor=white"></a>
 <a href="https://github.com/jitendra205saini/Manga-Translator/blob/main/README.hinglish.md#installation"><img alt="firefox" src="https://img.shields.io/badge/Firefox-supported-FF7139?logo=firefoxbrowser&logoColor=white"></a>
@@ -33,6 +33,12 @@ Japanese · Korean · Chinese · English → हिन्दी
 | <img src="docs/demo_before.png" width="420"> | <img src="docs/demo_after.png" width="420"> |
 
 *Ye demo page README ke liye banaya gaya hai. Left mein ladki bol rahi hai ("थक गई"), right mein ladka ("छोड़ दूंगा").*
+
+| Webtoon: split bubble, before | After |
+|---|---|
+| <img src="docs/webtoon_before.jpg" width="420"> | <img src="docs/webtoon_after.jpg" width="420"> |
+
+*Asli webtoon page jise site ne alag tasveeron mein kaata. Teen bubble kat ke do tasveeron mein the; har ek poora padha gaya aur dono par sahi bana.*
 
 </div>
 
@@ -59,8 +65,16 @@ isliye Hindi mein gender sahi aata hai: ladki bole to *"मैं थक गई"
 | **Saaf typesetting** | Sirf text ke pixels mitata hai, art ko LaMa inpainting se wapas banata hai aur Hindi comic font mein bubble ki shape mein fit karta hai |
 | **Backup chain** | Gemini → Groq (Qwen vision model, image bhi dekhta hai) → local NLLB. Free limit khatam ho to bhi padhna nahi rukta |
 | **Firefox aur Chrome** | Manifest V3 extension, kisi bhi site par chalta hai, "Always on for this site" option ke saath |
-| **Tez padhai** | Aage ke pages pehle se, 3 pages ek saath, AI ke jawab ke dauraan hi text mitana, har series ki language yaad, aur disk cache |
+| **Tez padhai** | Aage ke pages pehle se, 5 pages ek saath, AI ke jawab ke dauraan hi text mitana, har series ki language yaad, aur disk cache |
 | **Free limit bachata hai** | Ek AI request mein 3 pages tak, isliye roz ki free limit mein ~3 guna pages |
+| **Poora chapter, kram se** | Chapter ka har page upar se neeche tak translate, aap kahin bhi scroll karo. Jo page baaki hai us par loading parda |
+| **Tab chhodne par bhi** | Doosre tab par jaane par bhi translation chalta rehta hai |
+| **Webtoon ke tukde** | Jo sites lambi patti ko kai tasveeron mein kaatti hain, wahan bubble do hisson mein bat jaata hai. Extension upar aur neeche ke tukde bhi bhejta hai, isliye kata bubble poora padha jaata hai aur dono tasveeron par sahi chipakta hai |
+| **Behtar Korean / Chinese OCR** | Korean aur Chinese PaddleOCR v5 (ONNX) se, Japanese manga-ocr se |
+| **Agla chapter pehle se** | Chapter khatam hote hi agle chapter ke pehle pages pehle se translate |
+| **Dobara translate** | Page par right-click karke **Translate this page again**, cache chhod ke naya anuvaad |
+| **Limit ka saaf message** | Saari free AI limit khatam ho to page par dikhta hai ki kab dobara shuru hoga, aur apne aap shuru hota hai. Popup mein aaj ka use aur Google ka reset time |
+| **Kai Gemini keys** | Comma laga ke ek se zyada key daalo. Jis key ki limit khatam ho wo ruk jaati hai aur agli chalti hai |
 | **Original / Hindi toggle** | **Alt+O** dabao, saare pages original aur phir Hindi mein badal jaate hain |
 | **Local first** | `127.0.0.1` par chalta hai. API keys aapke PC par hi rehti hain, kabhi commit nahi hoti |
 
@@ -70,36 +84,37 @@ isliye Hindi mein gender sahi aata hai: ladki bole to *"मैं थक गई"
 flowchart LR
     subgraph B[Browser extension]
         direction TB
-        B1[Manga page<br/>Firefox / Chrome] --> B2[content.js<br/>pages dhoondhe, 3 ek saath]
-        B2 --> B3[background.js<br/>image laaye]
+        B1[Manga page<br/>Firefox / Chrome] --> B2[content.js<br/>poora chapter, upar se neeche<br/>5 pages ek saath + loading parda]
+        B2 --> B3[background.js<br/>page + upar / neeche ke webtoon tukde<br/>tab chhodne par bhi chalta rahe]
     end
 
-    subgraph S[Local server :7860]
+    subgraph S[Local server :47391]
         direction TB
-        S1{Cache mein?} -->|nahi| S2[Windows OCR<br/>text + language]
-        S2 --> S3[ML detector<br/>bubbles + text boxes]
-        S3 --> S4[Batcher<br/>3 pages tak]
+        S1{Cache mein?<br/>image hash ya URL} -->|nahi| S2[Padosi tukde jodo]
+        S2 --> S3[OCR<br/>Windows OCR · PaddleOCR ko/zh<br/>manga-ocr ja]
+        S3 --> S4[ML detector<br/>bubbles + text boxes]
+        S4 --> S5[Bubble usi page ka<br/>jisme uska beech hai]
+        S5 --> S6[Batcher<br/>3 pages tak]
     end
 
     subgraph A[AI translation]
         direction TB
-        A1[Gemini Flash-Lite<br/>images + numbered boxes] -.->|limit / error| A2[Groq<br/>Qwen vision]
+        A1[Gemini Flash-Lite<br/>kai keys, baari baari] -.->|limit / error| A2[Groq<br/>vision model]
         A2 -.->|fail| A3[Local NLLB]
     end
 
-    subgraph R[Hindi likhna]
+    subgraph R[Typesetting]
         direction TB
-        R1{Text bubble mein?} -->|haan| R2[Text pixels mitao]
-        R1 -->|nahi| R3[LaMa inpainting]
-        R2 --> R4[Hindi bubble mein fit<br/>Baloo 2 + raqm]
-        R3 --> R4
+        R1[Text mitao + LaMa] --> R2[Hindi bubble mein fit<br/>Baloo 2 + raqm]
+        R2 --> R3[Apna page kaato +<br/>padosi ke liye patch]
     end
 
     B3 --> S1
-    S4 --> A1
+    S6 --> A1
     A1 --> R1
-    R4 -->|translated image| B1
-    S1 -->|haan| B1
+    R3 -->|page + patch| B2
+    S1 -->|haan| B2
+    A1 -.->|saari limit khatam: retry_after| B2
 ```
 
 Har translated page disk par cache hota hai, aur characters ka gender har series ke liye `memory.json` mein yaad rehta hai.
@@ -111,7 +126,7 @@ Original aur Hindi page ke beech badalne ke liye **Alt+O** dabao.
 |---|---|
 | Browser extension | JavaScript, Manifest V3 (Firefox 128+ / Chrome) |
 | Server | Python 3.13, FastAPI, Uvicorn |
-| OCR | Windows 11 ka built-in OCR (`winrt`) |
+| OCR | Windows 11 ka built-in OCR (`winrt`), Japanese ke liye `manga-ocr` ONNX, Korean / Chinese ke liye PaddleOCR v5 ONNX |
 | Bubble / text detection | `ogkalu/comic-text-and-bubble-detector` (RT-DETR-v2, ONNX Runtime + DirectML), OpenCV fallback |
 | Inpainting | LaMa (`Carve/LaMa-ONNX`), OpenCV fallback |
 | Translation | Google Gemini Flash-Lite, Groq (`openai/gpt-oss-120b`), Meta NLLB-200 600M (offline) |

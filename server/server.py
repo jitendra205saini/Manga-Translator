@@ -42,13 +42,13 @@ async def lifespan(app):
         except Exception as e:
             print("[server] warm-up fail:", e)
     await asyncio.to_thread(warm)
-    print("[server] ready on http://127.0.0.1:7860")
+    print("[server] ready on http://127.0.0.1:47391")
     yield
 
 
 app = FastAPI(lifespan=lifespan)
 # sirf apna browser extension aur apna /setup page: koi website tumhara AI quota use na kar sake
-ALLOWED_ORIGIN = r"^(moz-extension|chrome-extension)://[^/]+$|^http://(127\.0\.0\.1|localhost):7860$"
+ALLOWED_ORIGIN = r"^(moz-extension|chrome-extension)://[^/]+$|^http://(127\.0\.0\.1|localhost):47391$"
 app.add_middleware(CORSMiddleware, allow_origin_regex=ALLOWED_ORIGIN, allow_methods=["*"], allow_headers=["*"])
 
 
@@ -68,6 +68,8 @@ class TranslateRequest(BaseModel):
     fast: bool = False   # Fast mode: Groq pehle
     url: str = ""        # page ki asli image URL: agla chapter pehle se translate ho to seedha cache se
     fresh: bool = False  # "dobara translate karo": cache mat dekho
+    prev_images: list[str] = []  # upar wale tukde, paas wala pehle (webtoon ke kate bubble poore dikhane ke liye)
+    next_images: list[str] = []  # neeche wale tukde
 
 
 def download_image(url, referer):
@@ -95,7 +97,7 @@ async def health():
 
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SETUP_ORIGINS = {"http://127.0.0.1:7860", "http://localhost:7860"}
+SETUP_ORIGINS = {"http://127.0.0.1:47391", "http://localhost:47391"}
 
 
 def _mask(k):
@@ -126,7 +128,7 @@ async def get_config():
 async def set_config(request: Request):
     # sirf apne /setup page se: koi aur website keys na badal sake
     if request.headers.get("origin") not in SETUP_ORIGINS:
-        raise HTTPException(403, "keys can only be changed from http://127.0.0.1:7860/setup")
+        raise HTTPException(403, "keys can only be changed from http://127.0.0.1:47391/setup")
     body = await request.json()
     path = llm.CONFIG_PATH
     cfg = {}
@@ -156,7 +158,9 @@ async def translate(req: TranslateRequest):
             raw = await asyncio.to_thread(download_image, req.src, req.page_url)
         else:
             return {"error": "image ya src nahi mila"}
-        return await translator.translate_page(raw, req.lang, req.page_url, req.fast, req.url, req.fresh)
+        nb = lambda xs: [base64.b64decode(x.split(",", 1)[-1]) for x in xs] or None
+        return await translator.translate_page(raw, req.lang, req.page_url, req.fast, req.url, req.fresh,
+                                               nb(req.prev_images), nb(req.next_images))
     except Exception as e:
         traceback.print_exc()
         wait = llm.limit_wait()

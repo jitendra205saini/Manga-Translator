@@ -76,7 +76,7 @@ const $ = (id) => document.getElementById(id);
   const opened = Date.now();
   async function serverStatus() {
   try {
-    const r = await (await fetch("http://127.0.0.1:7860/health")).json();
+    const r = await (await fetch("http://127.0.0.1:47391/health")).json();
     const lines = Object.entries(r.providers || {}).filter(([, s]) => s !== "not installed").map(([p, s]) =>
       `<div>${p}: <span class="${s === "ready" ? "ok" : "bad"}">${s}</span></div>`);
     const p = r.providers || {};
@@ -91,7 +91,7 @@ const $ = (id) => document.getElementById(id);
     $("status").innerHTML = `<div class="ok">Server running${r.version ? " (v" + r.version + ")" : ""}</div>` +
       (r.version && r.version !== extVer ? `<div class="bad">Version mismatch: extension v${extVer}, server v${r.version}. Update the older one.</div>` : "") + lines.join("") + usage +
       `<div><a href="#" id="keys">${noKey ? "<b>Add API key (required)</b>" : "Change API keys"}</a></div>`;
-    $("keys").onclick = (e) => { e.preventDefault(); chrome.tabs.create({ url: "http://127.0.0.1:7860/setup" }); };
+    $("keys").onclick = (e) => { e.preventDefault(); chrome.tabs.create({ url: "http://127.0.0.1:47391/setup" }); };
   } catch (e) {
     const waited = Math.round((Date.now() - opened) / 1000);
     $("status").innerHTML = waited < 45

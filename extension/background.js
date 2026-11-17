@@ -1,4 +1,4 @@
-const SERVER = "http://127.0.0.1:7860";
+const SERVER = "http://127.0.0.1:47391";
 const key = (tabId) => `tab_${tabId}`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -150,6 +150,19 @@ async function handleTranslate(msg, tab) {
     const r = await postServer({ ...base, cacheOnly: true });
     if (r && r.image) return r;
   }
+
+  // webtoon ke upar/neeche wale tukde (kata bubble poora dikhane ke liye); paas wala pehle, fail par wahin ruko
+  const grab = async (list) => {
+    const out = [];
+    for (const n of list || []) {
+      const b = await fetchAsPngBase64(n.src, tab.url).catch(() => null);
+      if (!b) break;
+      out.push(b);
+    }
+    return out;
+  };
+  const [prev_images, next_images] = await Promise.all([grab(msg.prev), grab(msg.next)]);
+  Object.assign(base, { prev_images, next_images });
 
   // 1) content script ne canvas se image di
   if (msg.image) return postServer({ ...base, image: msg.image });

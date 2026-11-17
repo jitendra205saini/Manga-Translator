@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Local Manga Translator (Hindi)",
-  "version": "2.6.5",
+  "version": "2.7.0",
   "description": "Translates manga and manhwa pages into casual Hindi using a local server (Gemini / Groq / NLLB).",
   "permissions": [
     "activeTab",
@@ -13,7 +13,7 @@
   ],
   "host_permissions": [
     "<all_urls>",
-    "http://127.0.0.1:7860/*"
+    "http://127.0.0.1:47391/*"
   ],
   "background": {
     "service_worker": "background.js",
