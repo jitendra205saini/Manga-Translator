@@ -72,6 +72,15 @@ const $ = (id) => document.getElementById(id);
   progress();
   setInterval(progress, 1000);
 
+  // Gemini keys: kitni taiyaar, kitni limit par (setup page par har key ka poora haal)
+  function keysLine(ks) {
+    if (!ks || ks.length < 2) return "";
+    const ready = ks.filter((k) => k.state === "ok").length;
+    const day = ks.filter((k) => k.state === "day").length;
+    const bad = ks.filter((k) => k.state === "bad").length;
+    return `<br>Gemini keys: ${ready} of ${ks.length} ready` + (day ? `, ${day} done for today` : "") +
+      (bad ? `, <span class="bad">${bad} not valid</span>` : "");
+  }
   const extVer = chrome.runtime.getManifest().version;
   $("ver").textContent = "v" + extVer;
   // server status: jawab na aaye to "start ho raha hai" dikhao aur har 2s dobara dekho
@@ -89,6 +98,7 @@ const $ = (id) => document.getElementById(id);
       (u.cached ? `, ${u.cached} from cache` : "") +
       `<br>Gemini: ${gUsed} of ~${gLim} requests (${Math.max(0, gLim - gUsed)} left)` +
         (u.reset_in ? `<br>Resets at ${new Date(Date.now() + u.reset_in * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} (in ${Math.floor(u.reset_in / 3600)}h ${Math.floor(u.reset_in % 3600 / 60)}m)` : "") +
+      (keysLine(r.gemini_keys)) +
       (u.groq ? `<br>Groq: ${u.groq} requests` : "") +
       (u.backup ? `<br>Backup translator: ${u.backup} pages` : "") +
       (!r.backup && $("backup").checked ? `<br><span class="bad">Backup translator: no key. Add it in Change API keys.</span>` : "") + `</div>`;

@@ -95,7 +95,8 @@ async def health():
     except Exception:
         ver = ""
     has_backup = bool(llm.load_config().get("backup", {}).get("api_key"))
-    return {"ok": True, "version": ver, "backup": has_backup, "gpu_lost": gpu_lost, "providers": llm.provider_status(), "usage": llm.usage_today()}
+    return {"ok": True, "version": ver, "backup": has_backup, "gpu_lost": gpu_lost, "providers": llm.provider_status(),
+            "usage": llm.usage_today(), "gemini_keys": llm.key_status()}
 
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -123,7 +124,19 @@ async def icon():
 @app.get("/config")
 async def get_config():
     cfg = llm.load_config()
-    return {p: _mask(cfg.get(p, {}).get("api_key", "")) for p in ("gemini", "groq", "backup")}
+    out = {p: _mask(cfg.get(p, {}).get("api_key", "")) for p in ("gemini", "groq", "backup")}
+    out["gemini_keys"] = llm.key_status(cfg)
+    return out
+
+
+@app.post("/keys/test")
+async def keys_test(request: Request):
+    """Setup page: har Gemini key Google se check karo (sahi / galat)."""
+    if request.headers.get("origin") not in SETUP_ORIGINS:
+        raise HTTPException(403, "only from the setup page")
+    keys = llm.gemini_keys(llm.load_config())
+    res = await asyncio.gather(*(asyncio.to_thread(llm.test_key, k) for k in keys))
+    return [{"n": n, "result": r, "note": note} for n, (r, note) in enumerate(res, 1)]
 
 
 @app.post("/config")
@@ -137,6 +150,23 @@ async def set_config(request: Request):
     if os.path.exists(path):
         with open(path, encoding="utf-8") as f:
             cfg = json.load(f)
+    # Gemini: alag-alag khaane (slots). "" = purani rakho, "-" = hatao
+    if isinstance(body.get("gemini_keys"), list):
+        old = llm.gemini_keys(llm.load_config())
+        new = []
+        for i, v in enumerate(body["gemini_keys"]):
+            v = str(v or "").strip()
+            if v == "-":
+                continue
+            if v:
+                new += [k for k in re.split(r"[,\s]+", v) if k]
+            elif i < len(old):
+                new.append(old[i])
+        new += old[len(body["gemini_keys"]):]
+        seen = set()
+        new = [k for k in new if not (k in seen or seen.add(k))]
+        cfg.setdefault("gemini", {})["api_key"] = ",".join(new)
+        body.pop("gemini", None)
     for p in ("gemini", "groq", "backup"):
         key = str(body.get(p) or "").strip()
         if key:

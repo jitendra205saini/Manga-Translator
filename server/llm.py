@@ -28,6 +28,10 @@ LANG_NAMES = {"ja": "Japanese", "ko": "Korean", "zh_hans": "Chinese",
 
 
 class RateLimited(RuntimeError):
+    daily = False  # True: din bhar ki limit khatam (Google ke reset tak), warna per-minute
+
+
+class BadKey(RuntimeError):
     pass
 
 
@@ -344,17 +348,68 @@ def gemini_keys(cfg):
     return [k for k in re.split(r"[,\s]+", str(cfg["gemini"].get("api_key") or "")) if k]
 
 
+_gkey_state = {}  # key -> "minute" | "day" | "bad" (abhi kyun ruki hai)
+
+
+def key_id(key):
+    import hashlib
+    return hashlib.md5(key.encode()).hexdigest()[:8]
+
+
+def key_status(cfg=None):
+    """Har Gemini key: kaunsi taiyaar, kaunsi limit par, aaj kitni baar chali (setup page / popup ke liye)."""
+    cfg = cfg or load_config()
+    u = usage_today()
+    out = []
+    for n, k in enumerate(gemini_keys(cfg), 1):
+        wait = int(_gkey_rest.get(k, 0) - time.time())
+        st = _gkey_state.get(k, "ok") if wait > 0 else "ok"
+        out.append({"n": n, "mask": k[:4] + "..." + k[-4:], "state": st, "wait": max(0, wait),
+                    "used": u.get("gk_" + key_id(k), 0)})
+    return out
+
+
 def call_gemini(cfg, prompt, img_b64):
     keys = gemini_keys(cfg)
-    order = [k for k in keys if _gkey_rest.get(k, 0) <= time.time()] or keys
+    now = time.time()
+    order = [k for k in keys if _gkey_rest.get(k, 0) <= now]
+    if not order:  # sab ruki: jo sabse pehle khulegi (galat key nahi)
+        order = sorted((k for k in keys if _gkey_state.get(k) != "bad"), key=lambda k: _gkey_rest.get(k, 0))[:1]
     for i, key in enumerate(order):
         try:
-            return _gemini_one(cfg, key, len(keys), prompt, img_b64)
-        except RateLimited:
-            _gkey_rest[key] = time.time() + 60
-            if i + 1 < len(order):
-                print(f"[gemini] key {keys.index(key) + 1} ki limit, agli key")
+            text = _gemini_one(cfg, key, len(keys), prompt, img_b64)
+            _gkey_state.pop(key, None)
+            usage_bump("gk_" + key_id(key))
+            return text
+        except RateLimited as e:
+            if e.daily:
+                _gkey_rest[key], _gkey_state[key] = time.time() + reset_in(), "day"
+                why = "aaj ki limit khatam"
+            else:
+                _gkey_rest[key], _gkey_state[key] = time.time() + 60, "minute"
+                why = "minute ki limit"
+            print(f"[gemini] key {keys.index(key) + 1}: {why}" + (", agli key" if i + 1 < len(order) else ""))
+        except BadKey as e:
+            _gkey_rest[key], _gkey_state[key] = time.time() + 3600, "bad"
+            print(f"[gemini] key {keys.index(key) + 1}: {e}")
     raise RateLimited("gemini: sab keys ki limit khatam")
+
+
+def test_key(key):
+    """Key sahi hai? (models list: koi translation request kharch nahi hoti)"""
+    try:
+        r = requests.get("https://generativelanguage.googleapis.com/v1beta/models",
+                         headers={"x-goog-api-key": key}, params={"pageSize": 1}, timeout=15)
+    except Exception as e:
+        return "error", str(e)[:120]
+    if r.status_code == 200:
+        if _gkey_state.get(key) == "bad":
+            _gkey_rest.pop(key, None)
+            _gkey_state.pop(key, None)
+        return "valid", ""
+    if r.status_code == 429:
+        return "valid", "limit"
+    return "invalid", f"HTTP {r.status_code}"
 
 
 def _gemini_one(cfg, key, nkeys, prompt, img_b64):
@@ -368,6 +423,7 @@ def _gemini_one(cfg, key, nkeys, prompt, img_b64):
     if _gemini_good in models:
         models = [_gemini_good] + [m for m in models if m != _gemini_good]
     last = None
+    daily_hit = False
     # Gemini dheema ho to poora page na atke: kul 40s, phir Groq (extension 90s mein haar maanta hai)
     deadline = time.time() + GEMINI_BUDGET
     for model in models:
@@ -399,7 +455,11 @@ def _gemini_one(cfg, key, nkeys, prompt, img_b64):
             continue
         if r.status_code == 429:
             last = f"{model}: limit"
+            if re.search(r"per ?day|PerDay|daily", r.text, re.I):
+                daily_hit = True
             continue  # har model ki limit alag hoti hai
+        if r.status_code in (400, 401, 403) and re.search(r"API_KEY_INVALID|API key not valid|PERMISSION_DENIED|API_KEY", r.text):
+            raise BadKey(f"gemini: key galat ya band ({r.status_code})")
         _check(r, "gemini " + model)
         data = r.json()
         try:
@@ -409,7 +469,9 @@ def _gemini_one(cfg, key, nkeys, prompt, img_b64):
         except (KeyError, IndexError):
             last = f"{model}: khaali jawab {str(data)[:200]}"
     if last and last.endswith("limit"):
-        raise RateLimited("gemini: sab models ki limit khatam")
+        e = RateLimited("gemini: sab models ki limit khatam")
+        e.daily = daily_hit
+        raise e
     raise RuntimeError(f"gemini: {last}")
 
 
@@ -550,6 +612,11 @@ def translate_pages(pages, lang, page_url="", fast=False, _retry=False, _waited=
         except RateLimited as e:
             _strikes[name] = _strikes.get(name, 0) + 1
             wait = 60 if _strikes[name] < 3 else 3600  # baar baar 429 = roz ki limit khatam
+            if name == "gemini":
+                # har key ka apna hisaab: jo key sabse pehle khulegi, tab tak (kam se kam 60 s)
+                opens = [_gkey_rest.get(k, 0) - time.time() for k in gemini_keys(cfg) if _gkey_state.get(k) != "bad"]
+                if opens:
+                    wait = max(60, min(opens))
             _cooldown[name] = time.time() + wait
             print(f"[{name}] {e}, {wait}s ke liye skip")
         except Exception as e:

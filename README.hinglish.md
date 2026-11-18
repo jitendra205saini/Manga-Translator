@@ -8,7 +8,7 @@
 
 Japanese · Korean · Chinese · English → हिन्दी
 
-<a href="https://github.com/jitendra205saini/Manga-Translator/releases/latest"><img alt="version" src="https://img.shields.io/badge/version-v2.8.1-blue"></a>
+<a href="https://github.com/jitendra205saini/Manga-Translator/releases/latest"><img alt="version" src="https://img.shields.io/badge/version-v2.8.2-blue"></a>
 <a href="https://www.python.org/downloads/"><img alt="python" src="https://img.shields.io/badge/python-3.13-3776AB?logo=python&logoColor=white"></a>
 <a href="https://github.com/jitendra205saini/Manga-Translator/blob/main/README.hinglish.md#kya-chahiye"><img alt="platform" src="https://img.shields.io/badge/platform-Windows%2011-0078D6?logo=windows&logoColor=white"></a>
 <a href="https://github.com/jitendra205saini/Manga-Translator/blob/main/README.hinglish.md#installation"><img alt="firefox" src="https://img.shields.io/badge/Firefox-supported-FF7139?logo=firefoxbrowser&logoColor=white"></a>
@@ -351,7 +351,7 @@ SETUP.bat
 - **Backup translator** saari AI limit khatam hone par bhi English manga chalu rakhta hai.
 - Koi page galat bana ho to right-click karke **Translate this page again**.
 - Original se milane ke liye **Alt+O** (ya popup ka button).
-- Roz zyada pages ke liye setup page par (popup mein **Change API keys**) alag Google accounts ki 2-3 Gemini keys comma laga ke daalo.
+- Roz zyada pages ke liye setup page par (popup mein **Change API keys**) 4 Gemini keys tak alag-alag khaanon mein daalo. Har key alag Google project ya account se banao. Page par har key ki halat (taiyaar, minute ki limit, aaj ke liye khatam, galat) aur aaj ka use dikhta hai, aur **Check Gemini keys** unhe test karta hai. Pehle Key 1 chalti hai, limit lagte hi agli.
 
 ## Configuration
 

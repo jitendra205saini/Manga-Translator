@@ -8,7 +8,7 @@
 
 Japanese · Korean · Chinese · English → हिन्दी
 
-<a href="https://github.com/jitendra205saini/Manga-Translator/releases/latest"><img alt="version" src="https://img.shields.io/badge/version-v2.8.1-blue"></a>
+<a href="https://github.com/jitendra205saini/Manga-Translator/releases/latest"><img alt="version" src="https://img.shields.io/badge/version-v2.8.2-blue"></a>
 <a href="https://www.python.org/downloads/"><img alt="python" src="https://img.shields.io/badge/python-3.13-3776AB?logo=python&logoColor=white"></a>
 <a href="https://github.com/jitendra205saini/Manga-Translator/blob/main/README.md#requirements"><img alt="platform" src="https://img.shields.io/badge/platform-Windows%2011-0078D6?logo=windows&logoColor=white"></a>
 <a href="https://github.com/jitendra205saini/Manga-Translator/blob/main/README.md#installation"><img alt="firefox" src="https://img.shields.io/badge/Firefox-supported-FF7139?logo=firefoxbrowser&logoColor=white"></a>
@@ -352,7 +352,7 @@ SETUP.bat
 - **Backup translator** keeps English manga going when every AI limit is used up.
 - Right-click a page and choose **Translate this page again** if a page came out wrong.
 - Press **Alt+O** (or the popup button) to compare with the original page.
-- For more pages per day, paste 2-3 Gemini keys from different Google accounts, separated by commas, on the setup page (**Change API keys** in the popup).
+- For more pages per day, add up to 4 Gemini keys in their own boxes on the setup page (**Change API keys** in the popup). Make each in a different Google project or account. The page shows each key's state (ready, minute limit, done for today, not valid) and today's use, and **Check Gemini keys** tests them. Key 1 is used first and the next one takes over when a key hits its limit.
 
 ## Configuration
 

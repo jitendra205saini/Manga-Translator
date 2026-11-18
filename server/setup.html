@@ -7,18 +7,25 @@
 <link rel="icon" href="/icon.png">
 <style>
   body { font-family: Segoe UI, sans-serif; background: #f6f3ee; color: #222; margin: 0; }
-  main { max-width: 560px; margin: 40px auto; background: #fff; padding: 28px 32px; border-radius: 12px; box-shadow: 0 2px 12px #0001; }
+  main { max-width: 600px; margin: 40px auto; background: #fff; padding: 28px 32px; border-radius: 12px; box-shadow: 0 2px 12px #0001; }
   h1 { font-size: 22px; margin: 0 0 6px; display: flex; align-items: center; gap: 10px; }
   h1 img { width: 36px; height: 36px; }
-  p.sub { color: #666; margin: 0 0 22px; }
+  h2 { font-size: 16px; margin: 26px 0 4px; }
+  p.sub { color: #666; margin: 0 0 12px; }
   label { font-weight: 600; display: block; margin-top: 18px; }
-  .hint { font-size: 13px; color: #666; margin: 4px 0 6px; }
+  .hint { font-size: 13px; color: #666; margin: 4px 0 6px; line-height: 1.45; }
   input { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px; }
   .status { font-size: 13px; margin-top: 4px; }
-  .ok { color: #1a7f37; } .missing { color: #b35900; }
+  .ok { color: #1a7f37; } .missing { color: #b35900; } .bad { color: #c00; } .wait { color: #b35900; }
   button { margin-top: 24px; background: #e8711a; color: #fff; border: 0; padding: 11px 22px; border-radius: 8px; font-size: 15px; cursor: pointer; }
+  button.light { background: #fff; color: #c45a0c; border: 1px solid #e8711a; margin-left: 8px; }
   #msg { margin-top: 14px; font-weight: 600; }
   a { color: #c45a0c; }
+  .slot { display: grid; grid-template-columns: 70px 1fr auto; gap: 8px; align-items: center; margin-top: 10px; }
+  .slot b { font-size: 14px; }
+  .slot .rm { font-size: 12px; color: #c00; cursor: pointer; background: none; border: 0; margin: 0; padding: 4px; }
+  .slot .status { grid-column: 2 / 4; margin-top: 0; }
+  .sum { margin-top: 10px; font-size: 14px; padding: 8px 12px; background: #f6f3ee; border-radius: 8px; }
 </style>
 </head>
 <body>
@@ -26,10 +33,12 @@
   <h1><img src="/icon.png" alt="">Manga Translator</h1>
   <p class="sub">Add at least one free API key. Gemini is recommended; Groq is used as a backup.</p>
 
-  <label for="gemini">Gemini API key</label>
-  <div class="hint">Free key: <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a> (sign in, click "Create API key", copy it).<br>More pages per day: paste keys from 2-3 different Google accounts, separated by commas. When one hits its limit, the next is used.</div>
-  <input id="gemini" placeholder="AIza..." autocomplete="off">
-  <div class="status" id="gemini_s"></div>
+  <h2>Gemini API keys</h2>
+  <div class="hint">Free key: <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a> (sign in, click "Create API key", copy it).<br>
+    <b>More pages per day:</b> add up to 4 keys. Make each key in a <b>different Google project or account</b>; keys from one project share one limit.
+    Key 1 is used first; when a key hits its limit it rests (1 minute, or until Google resets the day) and the next key is used automatically.</div>
+  <div id="slots"></div>
+  <div class="sum" id="sum"></div>
 
   <label for="groq">Groq API key (optional)</label>
   <div class="hint">Free key: <a href="https://console.groq.com/keys" target="_blank">console.groq.com/keys</a></div>
@@ -41,34 +50,114 @@
   <input id="backup" placeholder="API key" autocomplete="off">
   <div class="status" id="backup_s"></div>
 
-  <button id="save">Save</button>
+  <button id="save">Save</button><button id="test" class="light">Check Gemini keys</button>
   <div id="msg"></div>
 </main>
 <script>
+const SLOTS = 4;
+const $ = (id) => document.getElementById(id);
+let keys = [], tested = {};
+
+function mins(s) {
+  if (s >= 3600) return Math.floor(s / 3600) + "h " + Math.floor((s % 3600) / 60) + "m";
+  return Math.max(1, Math.ceil(s / 60)) + " min";
+}
+function stateText(k) {
+  const t = tested[k.n];
+  if (t && t.result === "invalid") return ["bad", "Key is not valid (" + t.note + "). Check it or replace it."];
+  if (k.state === "bad") return ["bad", "Key rejected by Google. Check it or replace it."];
+  if (k.state === "day") return ["wait", "Today's limit used up. Back in " + mins(k.wait) + " (Google's daily reset)."];
+  if (k.state === "minute") return ["wait", "Per-minute limit. Back in " + mins(k.wait) + "."];
+  return ["ok", "Ready" + (t && t.result === "valid" ? " · checked OK" : "")];
+}
+
+function render() {
+  const box = $("slots");
+  box.innerHTML = "";
+  const n = Math.max(SLOTS, keys.length);
+  for (let i = 0; i < n; i++) {
+    const k = keys[i];
+    const row = document.createElement("div");
+    row.className = "slot";
+    let status = "No key yet";
+    let cls = "missing";
+    if (k) {
+      const [c, t] = stateText(k);
+      cls = c;
+      status = "Saved: " + k.mask + " · used today: " + k.used + " · " + t;
+    }
+    row.innerHTML = `<b>Key ${i + 1}</b><input data-i="${i}" placeholder="${k ? "Leave empty to keep the saved key" : "AIza..."}" autocomplete="off">` +
+      (k ? `<button class="rm" data-rm="${i}" title="Remove this key">Remove</button>` : "<span></span>") +
+      `<div class="status ${cls}">${status}</div>`;
+    box.appendChild(row);
+  }
+  box.querySelectorAll(".rm").forEach((b) => (b.onclick = () => save(+b.dataset.rm)));
+  const ready = keys.filter((k) => stateText(k)[0] === "ok").length;
+  const used = keys.reduce((a, k) => a + k.used, 0);
+  $("sum").textContent = keys.length
+    ? `${keys.length} key(s) saved · ${ready} ready now · ${used} requests today · about ${keys.length * 500} requests per day in total`
+    : "No Gemini key yet.";
+}
+
 async function load() {
   const r = await (await fetch("/config")).json();
-  for (const p of ["gemini", "groq", "backup"]) {
-    const el = document.getElementById(p + "_s");
+  keys = r.gemini_keys || [];
+  render();
+  for (const p of ["groq", "backup"]) {
+    const el = $(p + "_s");
     el.textContent = r[p] ? "Saved key: " + r[p] + " (leave empty to keep it)" : "No key yet";
     el.className = "status " + (r[p] ? "ok" : "missing");
   }
 }
-document.getElementById("save").onclick = async () => {
-  const body = { gemini: document.getElementById("gemini").value.trim(), groq: document.getElementById("groq").value.trim(), backup: document.getElementById("backup").value.trim() };
+
+async function save(removeIdx) {
+  const slots = [...document.querySelectorAll("#slots input")].map((x) => x.value.trim());
+  if (removeIdx != null) slots[removeIdx] = "-";
+  const body = { gemini_keys: slots, groq: $("groq").value.trim(), backup: $("backup").value.trim() };
   const r = await fetch("/config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  const msg = document.getElementById("msg");
+  const msg = $("msg");
   if (r.ok) {
     const j = await r.json();
-    msg.textContent = j.ready ? "Saved. You can close this page and use the browser extension." : "Saved, but no key is set yet.";
+    msg.textContent = removeIdx != null ? "Key removed." :
+      j.ready ? "Saved. Checking the Gemini keys..." : "Saved, but no key is set yet.";
     msg.style.color = j.ready ? "#1a7f37" : "#b35900";
-    document.getElementById("gemini").value = document.getElementById("groq").value = document.getElementById("backup").value = "";
-    load();
+    $("groq").value = $("backup").value = "";
+    tested = {};
+    await load();
+    if (j.ready && removeIdx == null) test();
   } else {
     msg.textContent = "Could not save: " + (await r.text());
     msg.style.color = "#c00";
   }
-};
+}
+
+async function test() {
+  const msg = $("msg");
+  msg.textContent = "Checking each Gemini key with Google...";
+  msg.style.color = "#666";
+  try {
+    const r = await (await fetch("/keys/test", { method: "POST" })).json();
+    tested = {};
+    for (const t of r) tested[t.n] = t;
+    await load();
+    const bad = r.filter((t) => t.result !== "valid").length;
+    msg.textContent = !r.length ? "No Gemini key to check." :
+      bad ? `${bad} key(s) did not work: see the red lines above.` : "All Gemini keys work. You can close this page.";
+    msg.style.color = bad ? "#c00" : "#1a7f37";
+  } catch (e) {
+    msg.textContent = "Could not check the keys: " + e;
+    msg.style.color = "#c00";
+  }
+}
+
+$("save").onclick = () => save(null);
+$("test").onclick = test;
 load();
+// limit wali key ka bacha time taaza (par jab aap koi key likh rahe ho tab nahi, warna likha hua mit jaata)
+setInterval(() => {
+  const typing = [...document.querySelectorAll("input")].some((x) => x.value.trim());
+  if (!document.hidden && !typing) load();
+}, 15000);
 </script>
 </body>
 </html>
