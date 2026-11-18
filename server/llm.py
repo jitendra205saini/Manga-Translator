@@ -17,7 +17,7 @@ MEMORY_PATH = os.path.join(HERE, "memory.json")
 DEFAULT_CONFIG = {
     "providers": ["gemini", "groq", "nllb"],
     "backup": {"api_key": "", "url": ""},  # IndicTrans2 web API (sirf English), popup switch se
-    "gemini": {"api_key": "", "model": ["gemini-3.5-flash-lite", "gemini-flash-lite-latest"]},
+    "gemini": {"api_key": "", "model": ["gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-flash-latest"]},  # har model ki din ki limit alag: ek khatam to agla
     "groq": {"api_key": "", "model": ["qwen/qwen3.8-27b", "openai/gpt-oss-120b"],
              "vision_models": ["qwen/qwen3.8-27b"]},
     "image_max_side": 1024,
@@ -35,6 +35,12 @@ class BadKey(RuntimeError):
     pass
 
 
+_OLD_GEMINI_MODELS = [
+    ["gemini-3.5-flash-lite", "gemini-flash-lite-latest"],
+    ["gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-2.5-flash-lite"],
+]
+
+
 def load_config():
     cfg = json.loads(json.dumps(DEFAULT_CONFIG))
     if os.path.exists(CONFIG_PATH):
@@ -45,6 +51,9 @@ def load_config():
                 cfg[k].update(v)
             else:
                 cfg[k] = v
+    # purane install ki default model list (sab ek hi limit wale): nayi list (alag limit wale models bhi)
+    if cfg["gemini"].get("model") in _OLD_GEMINI_MODELS:
+        cfg["gemini"]["model"] = list(DEFAULT_CONFIG["gemini"]["model"])
     cfg["gemini"]["api_key"] = cfg["gemini"]["api_key"] or os.environ.get("GEMINI_API_KEY", "")
     cfg["groq"]["api_key"] = cfg["groq"]["api_key"] or os.environ.get("GROQ_API_KEY", "")
     return cfg

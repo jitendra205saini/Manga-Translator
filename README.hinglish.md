@@ -361,7 +361,7 @@ SETUP.bat
 |---|---|---|
 | `providers` | `["gemini", "groq", "nllb"]` | Translators kis kram mein try hon |
 | `gemini.api_key` | `""` | Aapki Gemini key. Comma laga ke kai keys, baari baari chalti hain (ya `GEMINI_API_KEY`) |
-| `gemini.model` | Flash-Lite models | Ek model ya list. Model busy ho to agla |
+| `gemini.model` | 5 Flash-Lite / Flash models | Ek model ya list. Har model ki din ki limit alag, isliye ek busy ya khatam ho to agla |
 | `gemini.daily_limit` | `500` | Popup mein dikhne wali roz ki request per key |
 | `gemini_rpm` | `14` | Har Gemini key ki per minute request |
 | `groq.api_key` | `""` | Aapki Groq key (ya `GROQ_API_KEY`) |

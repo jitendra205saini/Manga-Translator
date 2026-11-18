@@ -362,7 +362,7 @@ SETUP.bat
 |---|---|---|
 | `providers` | `["gemini", "groq", "nllb"]` | Order in which translators are tried |
 | `gemini.api_key` | `""` | Your Gemini key. Several keys separated by commas are used in turn (or set `GEMINI_API_KEY`) |
-| `gemini.model` | Flash-Lite models | One model or a list. The next one is tried if a model is busy |
+| `gemini.model` | 5 Flash-Lite / Flash models | One model or a list. Each model has its own daily limit, so the next one is used when one is busy or used up |
 | `gemini.daily_limit` | `500` | Requests per key per day shown in the popup |
 | `gemini_rpm` | `14` | Requests per minute per Gemini key |
 | `groq.api_key` | `""` | Your Groq key (or set `GROQ_API_KEY`) |
