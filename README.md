@@ -192,11 +192,9 @@ flowchart TD
     P --> BQ["Batcher: waits 0.6 s<br/>up to 3 pages of one series<br/>max 45 bubbles = 1 request"]
     BQ --> PC["Pacing under free limits<br/>14 / min per Gemini key · 25 / min Groq"]
     PC --> FM{"Fast mode?"}
-    FM -->|"no"| GM["Gemini Flash-Lite<br/>next key in rotation"]
+    FM -->|"no"| GM["Gemini<br/>4 keys × 5 models<br/>see the next diagram"]
     FM -->|"yes"| GQ["Groq vision model"]
-    GM -->|"429 limit"| KR["That key rests 60 s"]
-    KR -->|"other keys left"| GM
-    KR -->|"all keys resting"| GQ
+    GM -->|"every key resting"| GQ
     GQ -.->|"Fast mode: fails"| GM
     GM --> CK{"Answer usable?<br/>every line · no Urdu script<br/>no English left"}
     GQ --> CK
@@ -212,6 +210,34 @@ flowchart TD
     BK -->|"no"| NL{"NLLB installed?"}
     NL -->|"yes"| NN["NLLB-200 offline<br/>not cached"] --> OK
     NL -->|"no"| RT["Error + retry_after<br/>page waits, retries by itself"]
+```
+
+#### How Gemini keys and models switch
+
+Google's free limit is per **project and model**, not per key. So keys from different projects add up, and every model in a project has its own daily limit.
+
+```mermaid
+flowchart TD
+    S["Request ready"] --> A{"Any key ready?<br/>not resting"}
+    A -->|"no"| GQ["Groq<br/>until the first key reopens"]
+    A -->|"yes"| K["Take the first ready key<br/>Key 1 → Key 2 → Key 3 → Key 4"]
+    K --> MD["Try its models in order<br/>last model that worked goes first"]
+    MD --> L["1 gemini-3.5-flash-lite<br/>2 gemini-flash-lite-latest<br/>3 gemini-3.1-flash-lite<br/>4 gemini-3.5-flash<br/>5 gemini-flash-latest"]
+    L --> R{"Google's answer"}
+    R -->|"200 OK"| OK["Hindi lines<br/>count +1 for this key"]
+    R -->|"429 on this model"| NM{"Another model left?"}
+    NM -->|"yes"| L
+    NM -->|"no: every model limited"| T{"Was every limit<br/>per day?"}
+    T -->|"yes"| DAY["Key rests until Google's<br/>daily reset (about 1:30 PM IST)"]
+    T -->|"no: per minute"| MIN["Key rests 60 s"]
+    R -->|"400 / 403: key not valid"| BAD["Key skipped for 1 hour<br/>shown red on the setup page"]
+    R -->|"404: model not found"| GONE["Model dropped from the list"] --> NM
+    DAY --> NK{"Next key ready?"}
+    MIN --> NK
+    BAD --> NK
+    NK -->|"yes"| K
+    NK -->|"no"| GQ
+    SAVE["Keys saved on the setup page"] -.->|"old block cleared,<br/>new keys tried at once"| A
 ```
 
 ### 5. Typesetting and returning the page

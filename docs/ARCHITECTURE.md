@@ -6,7 +6,7 @@ This page explains how Manga Translator works inside: which parts exist, how a p
 - [2. Life of one page](#2-life-of-one-page)
 - [3. Server pipeline](#3-server-pipeline)
 - [4. Webtoon strips and split bubbles](#4-webtoon-strips-and-split-bubbles)
-- [5. AI providers, limits and fallbacks](#5-ai-providers-limits-and-fallbacks)
+- [5. AI providers, limits and fallbacks](#5-ai-providers-limits-and-fallbacks) (including how Gemini keys and models switch)
 - [6. Page states in the extension](#6-page-states-in-the-extension)
 - [7. Caching](#7-caching)
 - [8. Files](#8-files)
@@ -180,11 +180,9 @@ flowchart TD
     F -->|no| G1
     F -->|yes| Q1
 
-    G1["Gemini Flash-Lite<br/>next key in rotation"] --> GR{"OK?"}
+    G1["Gemini<br/>4 keys × 5 models, see below"] --> GR{"OK?"}
     GR -->|yes| CHK
-    GR -->|"429 limit"| GK["That key rests 60 s,<br/>try the next key"]
-    GK -->|keys left| G1
-    GK -->|all keys resting| Q1
+    GR -->|"every key resting"| Q1
 
     Q1["Groq vision model"] --> QR{"OK?"}
     QR -->|yes| CHK
@@ -206,6 +204,35 @@ The diagram shows the normal order. With **Fast mode** on, the order flips: Groq
 Rate pacing keeps requests under the free limits: about 14 requests per minute per Gemini key and 25 per minute for Groq. The daily Gemini count in the popup follows Google's day, which resets at midnight Pacific time (around 1:30 PM in India).
 
 Each request also carries the series memory: character names with their gender and fixed Hindi spelling, and the last 8 translated lines, so verbs keep the right gender and names are spelled the same on every page.
+
+### How Gemini keys and models switch
+
+Google's free limit is per project **and** model. The server keeps a state for every key (ready, resting for a minute, done for the day, not valid) and treats Gemini as available while any key is ready.
+
+```mermaid
+flowchart TD
+    S["Request ready"] --> A{"Any key ready?"}
+    A -->|no| GQ["Groq until the first key reopens"]
+    A -->|yes| K["First ready key<br/>Key 1 → 2 → 3 → 4"]
+    K --> L["Models in order, last good one first<br/>3.5-flash-lite · flash-lite-latest · 3.1-flash-lite<br/>3.5-flash · flash-latest"]
+    L --> R{"Answer"}
+    R -->|200| OK["Hindi lines, key count +1"]
+    R -->|"429"| NM{"Another model left?"}
+    NM -->|yes| L
+    NM -->|no| T{"Every 429 per day?"}
+    T -->|yes| DAY["Key rests until Google's daily reset"]
+    T -->|no| MIN["Key rests 60 s"]
+    R -->|"400 / 403 invalid key"| BAD["Key skipped 1 h, red on setup page"]
+    R -->|404| GONE["Model dropped"] --> NM
+    DAY --> NK{"Next key ready?"}
+    MIN --> NK
+    BAD --> NK
+    NK -->|yes| K
+    NK -->|no| GQ
+    SAVE["Keys saved on setup page"] -.->|"old block cleared"| A
+```
+
+The **Check Gemini keys** button on the setup page asks Google whether each key is valid (a model list call, which does not use any translation quota).
 
 ## 6. Page states in the extension
 

@@ -192,11 +192,9 @@ flowchart TD
     P --> BQ["Batcher: 0.6 s ruke<br/>ek series ke 3 pages tak<br/>max 45 bubbles = 1 request"]
     BQ --> PC["Free limit ke andar pacing<br/>har Gemini key 14 / min · Groq 25 / min"]
     PC --> FM{"Fast mode?"}
-    FM -->|"nahi"| GM["Gemini Flash-Lite<br/>baari ki agli key"]
+    FM -->|"nahi"| GM["Gemini<br/>4 keys × 5 models<br/>agla diagram dekho"]
     FM -->|"haan"| GQ["Groq vision model"]
-    GM -->|"429 limit"| KR["Wo key 60 s ruke"]
-    KR -->|"aur keys hain"| GM
-    KR -->|"saari keys ruki"| GQ
+    GM -->|"saari keys ruki"| GQ
     GQ -.->|"Fast mode: fail"| GM
     GM --> CK{"Jawab theek?<br/>har line · Urdu lipi nahi<br/>English nahi bachi"}
     GQ --> CK
@@ -212,6 +210,34 @@ flowchart TD
     BK -->|"nahi"| NL{"NLLB installed?"}
     NL -->|"haan"| NN["NLLB-200 offline<br/>cache nahi"] --> OK
     NL -->|"nahi"| RT["Error + retry_after<br/>page ruke, apne aap dobara"]
+```
+
+#### Gemini keys aur models kaise badalte hain
+
+Google ki free limit **project aur model** par lagti hai, key par nahi. Isliye alag projects ki keys jud jaati hain, aur ek project ke har model ki apni daily limit hoti hai.
+
+```mermaid
+flowchart TD
+    S["Request taiyaar"] --> A{"Koi key taiyaar?<br/>aaram par nahi"}
+    A -->|"nahi"| GQ["Groq<br/>jab tak pehli key na khule"]
+    A -->|"haan"| K["Pehli taiyaar key lo<br/>Key 1 → Key 2 → Key 3 → Key 4"]
+    K --> MD["Uske models kram se try karo<br/>jo pichhli baar chala wo pehle"]
+    MD --> L["1 gemini-3.5-flash-lite<br/>2 gemini-flash-lite-latest<br/>3 gemini-3.1-flash-lite<br/>4 gemini-3.5-flash<br/>5 gemini-flash-latest"]
+    L --> R{"Google ka jawab"}
+    R -->|"200 OK"| OK["Hindi lines<br/>is key ki ginti +1"]
+    R -->|"is model par 429"| NM{"Aur model bacha?"}
+    NM -->|"haan"| L
+    NM -->|"nahi: har model limit par"| T{"Har limit<br/>din wali thi?"}
+    T -->|"haan"| DAY["Key Google ke daily reset<br/>(~1:30 PM IST) tak aaram"]
+    T -->|"nahi: minute wali"| MIN["Key 60 s aaram"]
+    R -->|"400 / 403: galat key"| BAD["Key 1 ghante ke liye chhodo<br/>setup page par laal"]
+    R -->|"404: model nahi mila"| GONE["Model list se hatao"] --> NM
+    DAY --> NK{"Agli key taiyaar?"}
+    MIN --> NK
+    BAD --> NK
+    NK -->|"haan"| K
+    NK -->|"nahi"| GQ
+    SAVE["Setup page par keys save"] -.->|"purana band hata,<br/>nayi keys turant"| A
 ```
 
 ### 5. Hindi likhna aur page lautana
