@@ -79,7 +79,8 @@ def get_fribidi():
 HF_FILES = [
     # (repo, file, local folder) - sab Apache-2.0
     ("ogkalu/comic-text-and-bubble-detector", "detector.onnx", "comic-text-and-bubble-detector"),
-    ("Carve/LaMa-ONNX", "lama_fp32.onnx", "LaMa-ONNX"),
+    # manga / anime par fine-tune kiya LaMa (comic-translate wala), kisi bhi size par chalta hai
+    ("ogkalu/lama-manga-onnx-dynamic", "lama-manga-dynamic.onnx", "lama-manga"),
     ("l0wgear/manga-ocr-2025-onnx", "encoder_model.onnx", "manga-ocr"),
     ("l0wgear/manga-ocr-2025-onnx", "decoder_model.onnx", "manga-ocr"),
     ("l0wgear/manga-ocr-2025-onnx", "vocab.txt", "manga-ocr"),

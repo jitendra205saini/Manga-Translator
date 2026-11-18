@@ -309,10 +309,15 @@ def erase_ml(img, groups):
                 if m is not None and lines is not None:
                     m = m & (1 - lines)  # panel ki border mat mitao
             else:
-                # art par: letters + unki safed outline, thoda zyada phailao taaki nishaan na bache
-                lm = inpaint.letter_mask(arr, ebox, grow=5)
-                tm = inpaint.text_mask(arr, ebox, grow=2)
-                m = lm if tm is None else np.maximum(lm, tm & cv2.dilate(lm, np.ones((9, 9), np.uint8)))
+                # art par: box ko 10% bada karke, uske andar band letters (kaale + safed outline)
+                bx0, by0, bx1, by1 = g["box"]
+                px, py = max(6, (bx1 - bx0) // 10), max(6, (by1 - by0) // 10)
+                ebox = (max(0, bx0 - px), max(0, by0 - py), min(W, bx1 + px), min(H, by1 + py))
+                m = inpaint.content_mask(arr, ebox)
+                if m is None:  # kuch na mila: purana tarika
+                    lm = inpaint.letter_mask(arr, ebox, grow=5)
+                    tm = inpaint.text_mask(arr, ebox, grow=2)
+                    m = lm if tm is None else np.maximum(lm, tm & cv2.dilate(lm, np.ones((9, 9), np.uint8)))
             if m is not None:
                 if flat:
                     _erase(arr, ebox, m, bg)
@@ -329,6 +334,43 @@ def erase_ml(img, groups):
                     bg = bg_color(arr, ebox, pad=2)
             plans.append(("box", ebox, None, 0, 0, bg, g["thickness"]))
     return orig, arr, plans
+
+
+def text_color(crop):
+    """Original text ka rang (comic-translate ka tarika, Apache-2.0): kinaron se background,
+    Otsu se text pixels, unka median. Lagbhag sleti = kaala / safed. Pakka na ho to None."""
+    if crop is None or crop.ndim != 3 or min(crop.shape[:2]) < 8:
+        return None
+    h, w = crop.shape[:2]
+    bw = max(2, min(h, w) // 8)
+    if h <= 2 * bw or w <= 2 * bw:
+        return None
+    ring = np.concatenate([crop[:bw, bw:-bw].reshape(-1, 3), crop[-bw:, bw:-bw].reshape(-1, 3),
+                           crop[bw:-bw, :bw].reshape(-1, 3), crop[bw:-bw, -bw:].reshape(-1, 3)]).astype(np.float64)
+    bg = np.median(ring, axis=0)
+    flat = crop.reshape(-1, 3).astype(np.float64)
+    dist = np.sqrt(((flat - bg) ** 2).sum(1))
+    d8 = np.clip(dist, 0, 255).astype(np.uint8).reshape(-1, 1)
+    t, _ = cv2.threshold(d8, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    sel = dist > max(float(t), 25.0)
+    if sel.sum() < 15:
+        return None
+    px = flat[sel]
+    bl = 0.299 * bg[0] + 0.587 * bg[1] + 0.114 * bg[2]
+    fg = np.percentile(px, 20, axis=0) if bl >= 170 else np.percentile(px, 80, axis=0) if bl <= 85 else np.median(px, axis=0)
+    r, g, b = (int(round(v)) for v in fg)
+    if max(r, g, b) - min(r, g, b) < 40:  # rang nahi, sleti: kaala ya safed
+        return (0, 0, 0) if luminance((r, g, b)) < 128 else (255, 255, 255)
+    return (r, g, b)
+
+
+def _pick_fg(orig, ebox, bg):
+    """Text ka rang: original se, agar background se saaf alag dikhe; warna kaala / safed."""
+    x0, y0, x1, y1 = ebox
+    c = text_color(orig[y0:y1, x0:x1])
+    if c is not None and abs(luminance(c) - luminance(bg)) >= 90:
+        return c
+    return (0, 0, 0) if luminance(bg) > 128 else (255, 255, 255)
 
 
 def render_ml(img, groups, texts, pre=None):
@@ -348,13 +390,13 @@ def render_ml(img, groups, texts, pre=None):
         text = (text or "").replace("\x01", "").strip()
         if not text:
             continue
-        fg = (0, 0, 0) if luminance(bg) > 128 else (255, 255, 255)
+        fg = _pick_fg(orig, ebox, bg)
         if kind == "mask":
             draw_in_mask(draw, text, mask, ox, oy, fg, bg, thick)
         else:
             if sfx:
                 draw_sfx(draw, text, ebox)
             else:
-                sbg = (255, 255, 255) if fg == (0, 0, 0) else (0, 0, 0)
+                sbg = (255, 255, 255) if luminance(fg) < 128 else (0, 0, 0)
                 draw_in_box(draw, text, ebox, fg, sbg, thick)
     return out

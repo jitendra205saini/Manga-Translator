@@ -256,7 +256,7 @@ Results from the backup translator and from NLLB are not cached, so the AI trans
 | `server/paddle_ocr.py` | PaddleOCR v5 (ONNX) for Korean and Chinese |
 | `server/mangaocr.py` | manga-ocr (ONNX) for Japanese |
 | `server/detector.py` | RT-DETR-v2 bubble and text detector (ONNX, DirectML GPU) |
-| `server/inpaint.py` | LaMa inpainting (ONNX) and text masks |
+| `server/inpaint.py` | Manga-tuned LaMa inpainting (ONNX) and text masks |
 | `server/render.py` | Erasing, fitting and drawing Hindi text |
 | `server/llm.py` | Prompt, batcher, Gemini / Groq calls, key rotation, pacing, limits, series memory, usage |
 | `server/backup_api.py` | Backup translator (English only) |
