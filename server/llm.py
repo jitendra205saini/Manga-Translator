@@ -423,7 +423,7 @@ def _gemini_one(cfg, key, nkeys, prompt, img_b64):
     if _gemini_good in models:
         models = [_gemini_good] + [m for m in models if m != _gemini_good]
     last = None
-    daily_hit = False
+    daily_hit = limited = 0  # kitne models par 429, unme se kitne din bhar wale
     # Gemini dheema ho to poora page na atke: kul 40s, phir Groq (extension 90s mein haar maanta hai)
     deadline = time.time() + GEMINI_BUDGET
     for model in models:
@@ -455,8 +455,9 @@ def _gemini_one(cfg, key, nkeys, prompt, img_b64):
             continue
         if r.status_code == 429:
             last = f"{model}: limit"
+            limited += 1
             if re.search(r"per ?day|PerDay|daily", r.text, re.I):
-                daily_hit = True
+                daily_hit += 1
             continue  # har model ki limit alag hoti hai
         if r.status_code in (400, 401, 403) and re.search(r"API_KEY_INVALID|API key not valid|PERMISSION_DENIED|API_KEY", r.text):
             raise BadKey(f"gemini: key galat ya band ({r.status_code})")
@@ -470,7 +471,7 @@ def _gemini_one(cfg, key, nkeys, prompt, img_b64):
             last = f"{model}: khaali jawab {str(data)[:200]}"
     if last and last.endswith("limit"):
         e = RateLimited("gemini: sab models ki limit khatam")
-        e.daily = daily_hit
+        e.daily = limited > 0 and daily_hit == limited  # sirf tab, jab har model ki din ki limit khatam
         raise e
     raise RuntimeError(f"gemini: {last}")
 
@@ -519,6 +520,27 @@ _cooldown = {}   # provider -> time.time() tak band
 _strikes = {}    # lagatar 429 ki ginti
 
 
+def resting(name, cfg):
+    """Provider kitne second aur band hai (0 = chalu). Gemini: koi bhi key taiyaar ho to chalu,
+    chahe pehle (kam keys ke waqt) poora Gemini band kiya gaya ho."""
+    now = time.time()
+    w = _cooldown.get(name, 0) - now
+    if name == "gemini":
+        keys = gemini_keys(cfg)
+        if any(_gkey_rest.get(k, 0) <= now for k in keys):
+            return 0  # koi key taiyaar
+        good = [k for k in keys if _gkey_state.get(k) != "bad"]
+        if good:  # sab ruki: jo sabse pehle khulegi
+            w = min(_gkey_rest.get(k, 0) for k in good) - now
+    return max(0, w)
+
+
+def keys_changed():
+    """Setup page par keys badli: purana "Gemini band" hatao, nayi keys ko turant mauka do."""
+    _cooldown.pop("gemini", None)
+    _strikes["gemini"] = 0
+
+
 def limit_wait():
     """Saare AI providers limit par hon to kitne second baad khulenge; koi chalu ho to 0."""
     cfg = load_config()
@@ -526,7 +548,7 @@ def limit_wait():
     waits = []
     for p in cfg["providers"]:
         if p in PROVIDERS and cfg.get(p, {}).get("api_key"):
-            w = _cooldown.get(p, 0) - now
+            w = resting(p, cfg)
             if w <= 0:
                 return 0
             waits.append(w)
@@ -542,8 +564,8 @@ def provider_status():
             out[p] = "ready" if nllb.AVAILABLE else "not installed"
         elif not cfg.get(p, {}).get("api_key"):
             out[p] = "no key"
-        elif _cooldown.get(p, 0) > time.time():
-            out[p] = f"limit reached, retry in {int(_cooldown[p] - time.time())}s"
+        elif resting(p, cfg) > 0:
+            out[p] = f"limit reached, retry in {int(resting(p, cfg))}s"
         else:
             out[p] = "ready"
     return out
@@ -564,7 +586,7 @@ def translate_pages(pages, lang, page_url="", fast=False, _retry=False, _waited=
         if name not in PROVIDERS:
             continue
         pc = cfg.get(name, {})
-        if not pc.get("api_key") or _cooldown.get(name, 0) > time.time():
+        if not pc.get("api_key") or resting(name, cfg) > 0:
             continue
         with_image = name == "gemini" or bool(pc.get("vision") or pc.get("vision_models"))
         page_list = [(im.size, gs) for im, gs in pages]
@@ -623,8 +645,8 @@ def translate_pages(pages, lang, page_url="", fast=False, _retry=False, _waited=
             print(f"[{name}] fail: {e}")
     # sab ki per-minute limit lagi hai: page chhodne ki jagah limit khulne tak ruko, phir ek baar aur
     if not _retry and not _waited:
-        waits = [_cooldown[p] - time.time() for p in order
-                 if p in PROVIDERS and cfg.get(p, {}).get("api_key") and _cooldown.get(p, 0) > time.time()]
+        waits = [resting(p, cfg) for p in order
+                 if p in PROVIDERS and cfg.get(p, {}).get("api_key") and resting(p, cfg) > 0]
         if waits and min(waits) <= 70:
             w = min(waits) + 1
             print(f"[limit] sab providers ruke hain, {w:.0f}s baad dobara")

@@ -166,6 +166,7 @@ async def set_config(request: Request):
         seen = set()
         new = [k for k in new if not (k in seen or seen.add(k))]
         cfg.setdefault("gemini", {})["api_key"] = ",".join(new)
+        llm.keys_changed()
         body.pop("gemini", None)
     for p in ("gemini", "groq", "backup"):
         key = str(body.get(p) or "").strip()
