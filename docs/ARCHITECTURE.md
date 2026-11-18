@@ -205,7 +205,7 @@ The diagram shows the normal order. With **Fast mode** on, the order flips: Groq
 
 Rate pacing keeps requests under the free limits: about 14 requests per minute per Gemini key and 25 per minute for Groq. The daily Gemini count in the popup follows Google's day, which resets at midnight Pacific time (around 1:30 PM in India).
 
-Each request also carries the series memory: character names with their gender and the last 8 translated lines, so verbs keep the right gender across pages.
+Each request also carries the series memory: character names with their gender and fixed Hindi spelling, and the last 8 translated lines, so verbs keep the right gender and names are spelled the same on every page.
 
 ## 6. Page states in the extension
 
@@ -271,7 +271,7 @@ All inside the install folder (`%LOCALAPPDATA%\Programs\Manga Translator\server`
 | File | Contents |
 |---|---|
 | `config.json` | API keys and settings |
-| `memory.json` | Per series: character genders and recent lines |
+| `memory.json` | Per series: character genders, Hindi name spellings and recent lines |
 | `usage.json` | Today's page and request counts |
 | `cache/` | Translated pages |
 | `models/` | Detector, LaMa, manga-ocr and PaddleOCR models |

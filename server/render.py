@@ -65,6 +65,23 @@ def wrap_text(draw, text, font, max_w):
     return lines
 
 
+def balanced_wrap(draw, text, font, max_w):
+    """Utni hi lines jitni greedy wrap deta, par sab lines lagbhag barabar chaudai ki
+    (aakhri line mein akela shabd na latke). Bubble oval hai, isliye beech wali line thodi lambi chal jaati hai."""
+    lines = wrap_text(draw, text, font, max_w)
+    n = len(lines)
+    if n <= 1:
+        return lines
+    lo, hi = max_w * 0.4, max_w
+    for _ in range(9):
+        mid = (lo + hi) / 2
+        if len(wrap_text(draw, text, font, mid)) <= n:
+            hi = mid
+        else:
+            lo = mid
+    return wrap_text(draw, text, font, hi)
+
+
 def draw_in_box(draw, text, box, fg, bg, thickness):
     x0, y0, x1, y1 = box
     bw, bh = max(1, x1 - x0), max(1, y1 - y0)
@@ -74,14 +91,14 @@ def draw_in_box(draw, text, box, fg, bg, thickness):
     chosen = None
     for size in range(max_size, min_size - 1, -1):
         font = get_font(size)
-        lines = wrap_text(draw, text, font, bw)
-        lh = int(size * 1.3)
+        lines = balanced_wrap(draw, text, font, bw)
+        lh = int(size * 1.25)
         if len(lines) * lh <= bh and all(draw.textlength(l, font=font) <= bw for l in lines):
             chosen = (font, lines, lh, size)
             break
     if chosen is None:
         font = get_font(min_size)
-        chosen = (font, wrap_text(draw, text, font, bw), int(min_size * 1.3), min_size)
+        chosen = (font, balanced_wrap(draw, text, font, bw), int(min_size * 1.25), min_size)
 
     font, lines, lh, size = chosen
     cx = (x0 + x1) / 2
@@ -154,7 +171,9 @@ def _fits(inner, cx, cy, lines, widths, lh):
 
 def draw_in_mask(draw, text, mask, ox, oy, fg, bg, thickness, tbox=None):
     """Bubble ki asli shape mein text fit karo (oval ho ya tircha)."""
-    pad = 6
+    # chhote bubble mein kinare se kam jagah chhodo (6 px ek chhote bubble ka bada hissa kha jaata hai)
+    hh, ww = mask.shape
+    pad = int(max(3, min(6, min(hh, ww) / 20)))
     # kinare par 0 ki patti: warna erode/distance transform mask ke kinare ko bubble ka andar samajhte hain
     P = pad + 2
     padded = np.pad(mask, P)
@@ -181,31 +200,36 @@ def draw_in_mask(draw, text, mask, ox, oy, fg, bg, thickness, tbox=None):
 
     def layout(size):
         font = get_font(size)
-        lh = int(size * 1.45)
-        # alag-alag chaudai try karo: patli bubble mein zyada lines
+        lh = int(size * 1.3)
+        # alag-alag chaudai try karo: patli bubble mein zyada lines; lines barabar lambai ki
         for frac in (0.95, 0.8, 0.65, 0.5):
-            lines = wrap_text(draw, text, font, bw * frac)
+            lines = balanced_wrap(draw, text, font, bw * frac)
             widths = [draw.textlength(l, font=font) for l in lines]
-            if _fits(inner, cx, cy, lines, widths, lh):
+            if _fits(area, cx, cy, lines, widths, lh):
                 return font, lines, lh
         return None
 
-    # binary search: sabse bada size jo fit ho (pehle har size ek-ek karke try hota tha)
-    lo, hi, best = 10, max_size, None
-    while lo <= hi:
-        mid = (lo + hi) // 2
-        r = layout(mid)
-        if r:
-            best, lo = (mid, r), mid + 1
-        else:
-            hi = mid - 1
+    # binary search: sabse bada size jo fit ho. Pehle bubble ke andar ki surakshit jagah (inner) mein;
+    # na ho to poore bubble (mask) mein, taaki chhote bubble mein text bahut chhota na ho
+    best = None
+    for area, floor in ((inner, 12), (mask, 11)):
+        lo, hi = floor, max_size
+        while lo <= hi:
+            mid = (lo + hi) // 2
+            r = layout(mid)
+            if r:
+                best, lo = (mid, r), mid + 1
+            else:
+                hi = mid - 1
+        if best:
+            break
     if best:
         size, (font, lines, lh) = best
         _draw_lines(draw, lines, font, lh, ox + cx, oy + cy, fg, bg, size)
         return
-    font = get_font(10)
-    lines = wrap_text(draw, text, font, bw * 0.8)
-    _draw_lines(draw, lines, font, 14, ox + cx, oy + cy, fg, bg, 10)
+    font = get_font(11)
+    lines = balanced_wrap(draw, text, font, bw * 0.9)
+    _draw_lines(draw, lines, font, 14, ox + cx, oy + cy, fg, bg, 11)
 
 
 def _draw_lines(draw, lines, font, lh, cx, cy, fg, bg, size):

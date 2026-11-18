@@ -8,7 +8,7 @@
 
 Japanese · Korean · Chinese · English → हिन्दी
 
-<a href="https://github.com/jitendra205saini/Manga-Translator/releases/latest"><img alt="version" src="https://img.shields.io/badge/version-v2.8.0-blue"></a>
+<a href="https://github.com/jitendra205saini/Manga-Translator/releases/latest"><img alt="version" src="https://img.shields.io/badge/version-v2.8.1-blue"></a>
 <a href="https://www.python.org/downloads/"><img alt="python" src="https://img.shields.io/badge/python-3.13-3776AB?logo=python&logoColor=white"></a>
 <a href="https://github.com/jitendra205saini/Manga-Translator/blob/main/README.hinglish.md#kya-chahiye"><img alt="platform" src="https://img.shields.io/badge/platform-Windows%2011-0078D6?logo=windows&logoColor=white"></a>
 <a href="https://github.com/jitendra205saini/Manga-Translator/blob/main/README.hinglish.md#installation"><img alt="firefox" src="https://img.shields.io/badge/Firefox-supported-FF7139?logo=firefoxbrowser&logoColor=white"></a>
@@ -59,11 +59,11 @@ isliye Hindi mein gender sahi aata hai: ladki bole to *"मैं थक गई"
 |---|---|
 | **Casual Hindi** | Anime dub jaisi bolchaal wali Hindi, shuddh ya kitabi Hindi nahi |
 | **Gender ke hisaab se** | AI page ki image dekhta hai, isliye verb bolne wale aur sunne wale ke gender se match karte hain |
-| **Character memory** | Har series mein characters ka gender aur pichhli 8 lines yaad rakhta hai (`memory.json`) |
+| **Character memory** | Har series mein characters ka gender, unke naam ki Hindi spelling aur pichhli 8 lines yaad rakhta hai (`memory.json`), isliye naam har page par ek jaisa likha jaata hai |
 | **4 languages** | Japanese, Korean, Chinese (Simplified / Traditional) aur English, auto-detect ke saath; do pages milne par series ke liye lock |
 | **Har language ka achha OCR** | Windows 11 OCR, Korean aur Chinese ke liye PaddleOCR v5, Japanese ke liye manga-ocr (khada text, furigana) |
 | **ML bubble detection** | RT-DETR model bubbles, bubble ke andar ka text aur art ke upar ka text pehchanta hai, GPU par ~0.1 s per page |
-| **Saaf typesetting** | Sirf text ke pixel mitata hai; art ke upar ka text letter-letter mask hokar manga par tuned LaMa model se wapas banta hai; Hindi comic font mein bubble ki shape mein fit hoti hai |
+| **Saaf typesetting** | Sirf text ke pixel mitata hai; art ke upar ka text letter-letter mask hokar manga par tuned LaMa model se wapas banta hai; Hindi comic font mein bubble ki shape mein, jitni badi fit ho, barabar lambi lines mein |
 | **Asli text ka rang** | Laal text laal hi rehta hai, gehre bubble ka safed text safed |
 | **Poora chapter, kram se** | Chapter ka har page upar se neeche tak translate, aap kahin bhi scroll karo. Jo page baaki hai us par loading parda |
 | **Tab chhodne par bhi** | Doosre tab par jaane par bhi translation chalta rehta hai |
@@ -187,7 +187,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    G["Is page ke bubbles"] --> M["Series memory jodo, memory.json<br/>character → gender · pichhli 8 lines"]
+    G["Is page ke bubbles"] --> M["Series memory jodo, memory.json<br/>character → gender + Hindi naam · pichhli 8 lines"]
     M --> P["Prompt: page image + numbered texts<br/>anime dub jaisi casual Hindi<br/>verb bolne / sunne wale ke gender se"]
     P --> BQ["Batcher: 0.6 s ruke<br/>ek series ke 3 pages tak<br/>max 45 bubbles = 1 request"]
     BQ --> PC["Free limit ke andar pacing<br/>har Gemini key 14 / min · Groq 25 / min"]
@@ -384,7 +384,7 @@ SETUP.bat
 | Pages par **AI ki free limit khatam** | Ruko (apne aap shuru honge), aur Gemini keys daalo, ya English ke liye Backup translator on karo |
 | Do tasveeron mein kata bubble galat | Dono tasveeren load hone ke baad right-click karke **Translate this page again** |
 | Hindi ki matras tooti dikhen | `check_setup.py` chalao; `Hindi shaping: OK (raqm)` aana chahiye |
-| Character ka gender galat | `server/memory.json` mein us character ko badlo (`"m"` ya `"f"`) |
+| Character ka gender ya naam ki spelling galat | `server/memory.json` mein `characters` (`"m"` / `"f"`) ya `names` badlo |
 | Log mein "model not found" | `config.json` mein model ka naam badlo |
 
 Setup kabhi bhi check karne ke liye:
@@ -427,8 +427,8 @@ Debug ke liye server log mein har page ki language, kaunsa provider chala aur ha
 - [x] Saari AI limit khatam hone par English ke liye backup translator
 - [x] Alag server port (47391)
 - [x] Signed Firefox add-on (hamesha ke liye install, `installer/signed/manga-translator.xpi`)
-- [ ] Poori series mein characters ke naam ek jaise
-- [ ] Chhote bubbles mein behtar text size aur line todna
+- [x] Poori series mein characters ke naam ek jaise
+- [x] Chhote bubbles mein behtar text size aur barabar line todna
 
 ## License
 

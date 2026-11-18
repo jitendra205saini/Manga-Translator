@@ -8,7 +8,7 @@
 
 Japanese · Korean · Chinese · English → हिन्दी
 
-<a href="https://github.com/jitendra205saini/Manga-Translator/releases/latest"><img alt="version" src="https://img.shields.io/badge/version-v2.8.0-blue"></a>
+<a href="https://github.com/jitendra205saini/Manga-Translator/releases/latest"><img alt="version" src="https://img.shields.io/badge/version-v2.8.1-blue"></a>
 <a href="https://www.python.org/downloads/"><img alt="python" src="https://img.shields.io/badge/python-3.13-3776AB?logo=python&logoColor=white"></a>
 <a href="https://github.com/jitendra205saini/Manga-Translator/blob/main/README.md#requirements"><img alt="platform" src="https://img.shields.io/badge/platform-Windows%2011-0078D6?logo=windows&logoColor=white"></a>
 <a href="https://github.com/jitendra205saini/Manga-Translator/blob/main/README.md#installation"><img alt="firefox" src="https://img.shields.io/badge/Firefox-supported-FF7139?logo=firefoxbrowser&logoColor=white"></a>
@@ -59,11 +59,11 @@ uses the correct gender: a girl says *"मैं थक गई"*, a boy says *"�
 |---|---|
 | **Casual Hindi** | Natural spoken Hindi like anime dubs, not formal or bookish Hindi |
 | **Gender-aware** | The AI sees the page image, so verbs match the speaker and the person being addressed |
-| **Character memory** | Remembers each character's gender and the last 8 lines per series (`memory.json`) |
+| **Character memory** | Remembers each character's gender, the Hindi spelling of their name and the last 8 lines per series (`memory.json`), so a name is written the same way on every page |
 | **4 source languages** | Japanese, Korean, Chinese (Simplified / Traditional) and English, with auto-detect that is locked per series once two pages agree |
 | **Strong OCR per language** | Windows 11 OCR, PaddleOCR v5 for Korean and Chinese, manga-ocr for Japanese (vertical text, furigana) |
 | **ML bubble detection** | An RT-DETR model finds bubbles, text inside bubbles and text on artwork, in about 0.1 s per page on the GPU |
-| **Clean typesetting** | Erases only the text pixels; text on artwork is masked letter by letter and rebuilt with a manga-tuned LaMa model; Hindi is fitted to the bubble shape in a comic-style font |
+| **Clean typesetting** | Erases only the text pixels; text on artwork is masked letter by letter and rebuilt with a manga-tuned LaMa model; Hindi is fitted to the bubble shape in a comic-style font, as large as fits, with lines of even length |
 | **Original text colour** | Red text stays red, white text in a dark bubble stays white |
 | **Whole chapter, in order** | Translates every page from the top of the chapter to the bottom, wherever you scroll, with a loading overlay on each page that is still waiting |
 | **Keeps going in the background** | Carries on when you switch to another tab |
@@ -187,7 +187,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    G["Bubbles of this page"] --> M["Add series memory, memory.json<br/>character → gender · last 8 lines"]
+    G["Bubbles of this page"] --> M["Add series memory, memory.json<br/>character → gender + Hindi name · last 8 lines"]
     M --> P["Prompt: page image + numbered texts<br/>casual Hindi like anime dubs<br/>verbs follow speaker / listener gender"]
     P --> BQ["Batcher: waits 0.6 s<br/>up to 3 pages of one series<br/>max 45 bubbles = 1 request"]
     BQ --> PC["Pacing under free limits<br/>14 / min per Gemini key · 25 / min Groq"]
@@ -385,7 +385,7 @@ SETUP.bat
 | Pages show **AI ki free limit khatam** | Wait (they resume by themselves), add more Gemini keys, or turn on the Backup translator for English |
 | A bubble split across two images is wrong | Right-click the page and choose **Translate this page again** after both images have loaded |
 | Hindi matras look broken | Run `check_setup.py`; it should show `Hindi shaping: OK (raqm)` |
-| Wrong gender for a character | Edit that character in `server/memory.json` (`"m"` or `"f"`) |
+| Wrong gender or name spelling for a character | Edit `characters` (`"m"` / `"f"`) or `names` in `server/memory.json` |
 | "model not found" in the log | Change the model name in `config.json` |
 
 To check the setup at any time:
@@ -428,8 +428,8 @@ gender (`m` / `f` / `u`). The original and translated versions of the last 40 pa
 - [x] Backup translator for English when every AI limit is used up
 - [x] Uncommon server port (47391)
 - [x] Signed Firefox add-on (permanent install, `installer/signed/manga-translator.xpi`)
-- [ ] Consistent character names across a series
-- [ ] Better text size and line breaks in small bubbles
+- [x] Consistent character names across a series
+- [x] Better text size and balanced line breaks in small bubbles
 
 ## License
 

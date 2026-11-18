@@ -66,22 +66,62 @@ def series_key(page_url):
 
 def get_memory(key):
     with _mem_lock:
-        return json.loads(json.dumps(_memory.get(key, {"characters": {}, "recent": []})))
+        m = json.loads(json.dumps(_memory.get(key, {"characters": {}, "recent": []})))
+    m.setdefault("names", {})
+    m.setdefault("alias", {})
+    return m
+
+
+def _norm_name(n):
+    return re.sub(r"[\s\-_.]+", " ", str(n or "")).strip().lower()
 
 
 def update_memory(key, characters, recent_pairs):
+    """characters: {"Name": "m|f"} ya {"Name": {"g": "m|f", "hi": "देवनागरी"}}.
+    Naam ki pehli Hindi spelling pakki; baad mein alag aaye to alias (output mein pakki se badli jaati hai)."""
     with _mem_lock:
         m = _memory.setdefault(key, {"characters": {}, "recent": []})
-        for name, g in (characters or {}).items():
-            if g in ("m", "f") and name:
-                m["characters"][name] = g
+        names = m.setdefault("names", {})
+        alias = m.setdefault("alias", {})
+        for name, v in (characters or {}).items():
+            if not name:
+                continue
+            g, hi = (v.get("g") or v.get("gender"), v.get("hi")) if isinstance(v, dict) else (v, None)
+            ck = next((k for k in m["characters"] if _norm_name(k) == _norm_name(name)), name)
+            if g in ("m", "f"):
+                m["characters"][ck] = g
+            hi = clean_hi(hi or "").strip(" .,!?-") if hi else ""
+            if not hi or re.search(r"[A-Za-z]", hi) or len(hi) > 30:
+                continue
+            # same character ka naam thoda alag likha ho (Mitsuharu / mitsuharu-san): purani entry
+            nk = next((k for k in names if _norm_name(k) == _norm_name(name)), None)
+            if nk is None:
+                names[name] = hi
+            elif hi != names[nk] and alias.get(hi) != names[nk]:
+                alias[hi] = names[nk]
         m["characters"] = dict(list(m["characters"].items())[-40:])
+        m["names"] = dict(list(names.items())[-40:])
+        m["alias"] = dict(list(alias.items())[-80:])
         m["recent"] = (m["recent"] + recent_pairs)[-8:]
         try:
             with open(MEMORY_PATH, "w", encoding="utf-8") as f:
                 json.dump(_memory, f, ensure_ascii=False, indent=1)
         except Exception as e:
             print("[memory] save fail:", e)
+
+
+def fix_names(text, key):
+    """AI ne kisi naam ki doosri spelling likhi ho to series ki pakki spelling se badlo."""
+    if not text:
+        return text
+    with _mem_lock:
+        alias = dict(_memory.get(key, {}).get("alias", {}))
+    for bad in sorted(alias, key=len, reverse=True):
+        good = alias[bad]
+        if not bad or bad in good or bad not in text:
+            continue  # "मित्सु" jaisa tukda pakke naam ka hissa ho to mat chhuo
+        text = re.sub(r"(?<![\u0900-\u097F])" + re.escape(bad), good, text)  # "-\u0938\u093E\u0928", "\u091C\u0940" peeche chal sakta hai
+    return text
 
 
 # ---------- prompt ----------
@@ -100,8 +140,12 @@ def build_prompt(pages, lang, memory, with_image):
                 item["page"] = pno
             bubbles.append(item)
 
-    chars = ", ".join(f"{n} ({'female' if g == 'f' else 'male'})"
+    names = memory.get("names", {})
+    chars = ", ".join(f"{n} ({'female' if g == 'f' else 'male'})" + (f" = {names[n]}" if names.get(n) else "")
                       for n, g in memory["characters"].items()) or "none yet"
+    extra = [f"{n} = {h}" for n, h in names.items() if n not in memory["characters"]]
+    if extra:
+        chars += "; other names: " + ", ".join(extra)
     recent = "\n".join(f"- {s} => {h}" for s, h in memory["recent"]) or "none"
 
     multi = (f"{len(pages)} consecutive pages are attached in reading order (image 1 = page 1, ...). "
@@ -134,6 +178,8 @@ Rules:
   Also match the gender of the person being addressed when Hindi needs it ("तू आ गई?" to a girl).
 - Choose तू / तुम / आप by relationship (friends/rivals: तू or तुम, elders/strangers/boss: आप).
 - Keep names as they are, written in Devanagari. Keep honorifics like -san/-kun/-chan only if natural, otherwise drop them.
+- Known characters above show "Name = देवनागरी": ALWAYS write that name with EXACTLY that Devanagari spelling,
+  on every page, never a different spelling. For a new name, choose one simple spelling and report it in "characters".
 - Write numbers with normal digits 0-9 (not १२३).
 - Each id is a separate bubble: translate exactly that bubble's text. Never move words or half-sentences between bubbles.
 - Keep it short so it fits in the bubble. Keep the emotion, jokes and tone (angry, shy, sarcastic).
@@ -148,7 +194,8 @@ Rules:
 
 Return ONLY JSON:
 {{"lines": [{{"id": 1, "gender": "m|f|u", "speaker": "name or empty", "hi": "Hindi text", "sfx": false}}],
-  "characters": {{"Name": "m|f"}}}}
+  "characters": {{"Name": {{"g": "m|f", "hi": "name in Devanagari"}}}}}}
+Put every named character who speaks or is named on these pages in "characters".
 Include every id exactly once."""
 
 
@@ -479,6 +526,8 @@ def translate_pages(pages, lang, page_url="", fast=False, _retry=False, _waited=
                 data = _parse_json(PROVIDERS[name](cfg, prompt_txt, None, prompt_txt))
                 by_id = {int(l["id"]): l for l in data.get("lines", []) if "id" in l}
             hindi = [clean_hi(by_id.get(i, {}).get("hi", "")) for i in range(1, total + 1)]
+            update_memory(key, data.get("characters"), [])
+            hindi = [fix_names(h, key) for h in hindi]
             # SFX ka nishaan: render isse bada comic style mein likhta hai
             hindi = [SFX_MARK + h if h and by_id.get(i, {}).get("sfx") is True else h
                      for i, h in zip(range(1, total + 1), hindi)]
@@ -488,7 +537,7 @@ def translate_pages(pages, lang, page_url="", fast=False, _retry=False, _waited=
             _strikes[name] = 0
             usage_bump(name)
             pairs = [[g["text"], h.lstrip(SFX_MARK)] for g, h in zip(all_groups, hindi) if h and g["text"]][-8:]
-            update_memory(key, data.get("characters"), pairs)
+            update_memory(key, None, pairs)
             genders = "".join(str(by_id.get(i, {}).get("gender", "u"))[:1] for i in range(1, total + 1))
             print(f"[{name}] {len(pages)} page(s), {total} bubbles, gender={genders}, {time.time() - t:.1f}s")
             if not _retry:
