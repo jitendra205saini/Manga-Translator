@@ -70,6 +70,7 @@ class TranslateRequest(BaseModel):
     fresh: bool = False  # "dobara translate karo": cache mat dekho
     prev_images: list[str] = []  # upar wale tukde, paas wala pehle (webtoon ke kate bubble poore dikhane ke liye)
     next_images: list[str] = []  # neeche wale tukde
+    backup: bool = False  # AI limit khatam ho to backup translator (popup switch)
 
 
 def download_image(url, referer):
@@ -93,7 +94,8 @@ async def health():
             ver = f.read().strip()
     except Exception:
         ver = ""
-    return {"ok": True, "version": ver, "gpu_lost": gpu_lost, "providers": llm.provider_status(), "usage": llm.usage_today()}
+    has_backup = bool(llm.load_config().get("backup", {}).get("api_key"))
+    return {"ok": True, "version": ver, "backup": has_backup, "gpu_lost": gpu_lost, "providers": llm.provider_status(), "usage": llm.usage_today()}
 
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -121,7 +123,7 @@ async def icon():
 @app.get("/config")
 async def get_config():
     cfg = llm.load_config()
-    return {p: _mask(cfg.get(p, {}).get("api_key", "")) for p in ("gemini", "groq")}
+    return {p: _mask(cfg.get(p, {}).get("api_key", "")) for p in ("gemini", "groq", "backup")}
 
 
 @app.post("/config")
@@ -135,7 +137,7 @@ async def set_config(request: Request):
     if os.path.exists(path):
         with open(path, encoding="utf-8") as f:
             cfg = json.load(f)
-    for p in ("gemini", "groq"):
+    for p in ("gemini", "groq", "backup"):
         key = str(body.get(p) or "").strip()
         if key:
             cfg.setdefault(p, {})["api_key"] = key
@@ -160,7 +162,7 @@ async def translate(req: TranslateRequest):
             return {"error": "image ya src nahi mila"}
         nb = lambda xs: [base64.b64decode(x.split(",", 1)[-1]) for x in xs] or None
         return await translator.translate_page(raw, req.lang, req.page_url, req.fast, req.url, req.fresh,
-                                               nb(req.prev_images), nb(req.next_images))
+                                               nb(req.prev_images), nb(req.next_images), req.backup)
     except Exception as e:
         traceback.print_exc()
         wait = llm.limit_wait()

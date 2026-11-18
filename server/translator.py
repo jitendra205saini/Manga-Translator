@@ -17,6 +17,7 @@ import mangaocr
 import paddle_ocr
 import llm
 from nllb import translate_texts
+import backup_api
 from ocr_windows import CJK_LANGS, OcrLanguageMissing, recognize_lines
 from render import erase_ml, render_ml
 
@@ -244,7 +245,7 @@ _inflight = {}  # key -> Future: ek hi page do baar aaye (prefetch + asli) to ek
 
 
 async def translate_page(raw, lang_choice="Auto", page_url="", fast=False, url="", fresh=False,
-                         prev_raws=None, next_raws=None):
+                         prev_raws=None, next_raws=None, backup=False):
     key = hashlib.md5(raw).hexdigest() + "_" + lang_choice + "_" + CACHE_VERSION
     if prev_raws or next_raws:  # padosi tukdon ke saath: kata bubble poora
         h = hashlib.md5()
@@ -264,7 +265,7 @@ async def translate_page(raw, lang_choice="Auto", page_url="", fast=False, url="
     fut = asyncio.get_running_loop().create_future()
     _inflight[key] = fut
     try:
-        result = await _translate_page(raw, key, lang_choice, page_url, fast, prev_raws, next_raws)
+        result = await _translate_page(raw, key, lang_choice, page_url, fast, prev_raws, next_raws, backup)
         if not fut.done():
             fut.set_result(result)
     except BaseException as e:
@@ -334,7 +335,7 @@ def _region(g):
     return g.get("bbox") or g["box"]
 
 
-async def _translate_page(raw, key, lang_choice, page_url, fast, prev_raws=None, next_raws=None):
+async def _translate_page(raw, key, lang_choice, page_url, fast, prev_raws=None, next_raws=None, backup=False):
     t0 = time.time()
     img = Image.open(io.BytesIO(raw)).convert("RGB")
     own_w, own_h = img.size
@@ -385,8 +386,17 @@ async def _translate_page(raw, key, lang_choice, page_url, fast, prev_raws=None,
         erase_task = asyncio.create_task(asyncio.to_thread(erase_ml, img, groups))
         ai = await asyncio.to_thread(llm.translate_with_llm, img, groups, lang, page_url, fast)
         pre = await erase_task
+        bcfg = llm.load_config().get("backup", {})
         if ai:
             hindi, provider = ai
+        elif backup and lang in backup_api.LANGS and bcfg.get("api_key"):
+            # saari AI limit khatam, popup ka backup switch on: English -> Hindi web API
+            provider = "backup"
+            try:
+                hindi = await asyncio.to_thread(backup_api.translate, [g["text"] or "" for g in groups], bcfg)
+            except Exception as e:
+                raise RuntimeError(f"AI limit khatam aur backup translator bhi nahi chala ({e}).")
+            llm.usage_bump("backup")
         else:
             provider = "nllb"
             try:
@@ -420,7 +430,7 @@ async def _translate_page(raw, key, lang_choice, page_url, fast, prev_raws=None,
 
     print(f"[translate] {img.size} lang={lang} via={result.get('provider', '-')} bubbles={result['bubbles']} "
           f"{time.time() - t0:.1f}s (ocr {t_ocr:.1f}s)")
-    if result.get("provider") not in ("nllb", "none"):  # NLLB backup wala result cache nahi, taaki baad mein AI se dobara ho
+    if result.get("provider") not in ("nllb", "none", "backup"):  # backup ka result cache nahi: limit khulne par AI se achha  # NLLB backup wala result cache nahi, taaki baad mein AI se dobara ho
         _cache[key] = result
         if result.get("image"):
             await asyncio.to_thread(_disk_put, key, result)

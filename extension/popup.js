@@ -19,7 +19,7 @@ const $ = (id) => document.getElementById(id);
 
   const k = `tab_${tab.id}`;
   let on = !!(await chrome.storage.session.get(k))[k];
-  const { lang, sites, fast } = await chrome.storage.local.get({ lang: "Auto", sites: [], fast: false });
+  const { lang, sites, fast, backup } = await chrome.storage.local.get({ lang: "Auto", sites: [], fast: false, backup: false });
 
   const paint = () => {
     $("toggle").textContent = on ? "ON (this tab)" : "OFF";
@@ -29,6 +29,8 @@ const $ = (id) => document.getElementById(id);
   $("lang").value = lang;
   $("fast").checked = fast;
   $("fast").onchange = () => chrome.storage.local.set({ fast: $("fast").checked });
+  $("backup").checked = backup;
+  $("backup").onchange = () => chrome.storage.local.set({ backup: $("backup").checked });
   $("always").checked = sites.includes(host);
   $("always").disabled = !host;
 
@@ -87,7 +89,9 @@ const $ = (id) => document.getElementById(id);
       (u.cached ? `, ${u.cached} from cache` : "") +
       `<br>Gemini: ${gUsed} of ~${gLim} requests (${Math.max(0, gLim - gUsed)} left)` +
         (u.reset_in ? `<br>Resets at ${new Date(Date.now() + u.reset_in * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} (in ${Math.floor(u.reset_in / 3600)}h ${Math.floor(u.reset_in % 3600 / 60)}m)` : "") +
-      (u.groq ? `<br>Groq: ${u.groq} requests` : "") + `</div>`;
+      (u.groq ? `<br>Groq: ${u.groq} requests` : "") +
+      (u.backup ? `<br>Backup translator: ${u.backup} pages` : "") +
+      (!r.backup && $("backup").checked ? `<br><span class="bad">Backup translator: no key. Add it in Change API keys.</span>` : "") + `</div>`;
     $("status").innerHTML = `<div class="ok">Server running${r.version ? " (v" + r.version + ")" : ""}</div>` +
       (r.version && r.version !== extVer ? `<div class="bad">Version mismatch: extension v${extVer}, server v${r.version}. Update the older one.</div>` : "") + lines.join("") + usage +
       `<div><a href="#" id="keys">${noKey ? "<b>Add API key (required)</b>" : "Change API keys"}</a></div>`;

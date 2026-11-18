@@ -36,27 +36,32 @@
   <input id="groq" placeholder="gsk_..." autocomplete="off">
   <div class="status" id="groq_s"></div>
 
+  <label for="backup">Backup translator key (optional)</label>
+  <div class="hint">IndicTrans2 web API. English only, used only when every AI limit is used up and the "Backup translator" switch in the extension popup is on.</div>
+  <input id="backup" placeholder="API key" autocomplete="off">
+  <div class="status" id="backup_s"></div>
+
   <button id="save">Save</button>
   <div id="msg"></div>
 </main>
 <script>
 async function load() {
   const r = await (await fetch("/config")).json();
-  for (const p of ["gemini", "groq"]) {
+  for (const p of ["gemini", "groq", "backup"]) {
     const el = document.getElementById(p + "_s");
     el.textContent = r[p] ? "Saved key: " + r[p] + " (leave empty to keep it)" : "No key yet";
     el.className = "status " + (r[p] ? "ok" : "missing");
   }
 }
 document.getElementById("save").onclick = async () => {
-  const body = { gemini: document.getElementById("gemini").value.trim(), groq: document.getElementById("groq").value.trim() };
+  const body = { gemini: document.getElementById("gemini").value.trim(), groq: document.getElementById("groq").value.trim(), backup: document.getElementById("backup").value.trim() };
   const r = await fetch("/config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   const msg = document.getElementById("msg");
   if (r.ok) {
     const j = await r.json();
     msg.textContent = j.ready ? "Saved. You can close this page and use the browser extension." : "Saved, but no key is set yet.";
     msg.style.color = j.ready ? "#1a7f37" : "#b35900";
-    document.getElementById("gemini").value = document.getElementById("groq").value = "";
+    document.getElementById("gemini").value = document.getElementById("groq").value = document.getElementById("backup").value = "";
     load();
   } else {
     msg.textContent = "Could not save: " + (await r.text());

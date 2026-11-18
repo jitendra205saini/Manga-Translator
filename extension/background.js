@@ -18,7 +18,7 @@ async function setBadge(tabId, on) {
 const hostOf = (url) => { try { return new URL(url).hostname; } catch (e) { return ""; } };
 
 async function getSettings() {
-  const r = await chrome.storage.local.get({ lang: "Auto", sites: [], fast: false });
+  const r = await chrome.storage.local.get({ lang: "Auto", sites: [], fast: false, backup: false });
   return r;
 }
 
@@ -143,7 +143,7 @@ async function postServer(body) {
 async function handleTranslate(msg, tab) {
   if (!tab || !(await isOn(tab.id))) return { error: "translation is OFF for this tab" };
   const st = await getSettings();
-  const base = { lang: st.lang, fast: !!st.fast, page_url: tab.url || "", url: msg.url || "", fresh: !!msg.fresh };
+  const base = { lang: st.lang, fast: !!st.fast, page_url: tab.url || "", url: msg.url || "", fresh: !!msg.fresh, backup: !!st.backup };
 
   // agla chapter pehle se translate ho chuka: download/upload ke bina seedha
   if (msg.url && !msg.fresh && !msg.prefetch) {

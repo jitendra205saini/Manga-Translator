@@ -16,6 +16,7 @@ MEMORY_PATH = os.path.join(HERE, "memory.json")
 
 DEFAULT_CONFIG = {
     "providers": ["gemini", "groq", "nllb"],
+    "backup": {"api_key": "", "url": ""},  # IndicTrans2 web API (sirf English), popup switch se
     "gemini": {"api_key": "", "model": ["gemini-3.5-flash-lite", "gemini-flash-lite-latest"]},
     "groq": {"api_key": "", "model": ["qwen/qwen3.8-27b", "openai/gpt-oss-120b"],
              "vision_models": ["qwen/qwen3.8-27b"]},
