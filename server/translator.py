@@ -192,9 +192,17 @@ def _disk_put(key, result):
         os.makedirs(CACHE_DIR, exist_ok=True)
         with open(os.path.join(CACHE_DIR, key + ".json"), "w", encoding="utf-8") as f:
             json.dump(result, f)
-        files = sorted((os.path.join(CACHE_DIR, n) for n in os.listdir(CACHE_DIR)), key=os.path.getmtime)
+        def mtime(p):
+            try:
+                return os.path.getmtime(p)
+            except OSError:
+                return 0
+        files = sorted((os.path.join(CACHE_DIR, n) for n in os.listdir(CACHE_DIR)), key=mtime)
         for old in files[:-400]:  # sirf aakhri 400 pages
-            os.remove(old)
+            try:
+                os.remove(old)
+            except OSError:
+                pass  # doosre page ne saath mein hata diya
     except Exception as e:
         print("[cache] save fail:", e)
 

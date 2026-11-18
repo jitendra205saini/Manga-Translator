@@ -265,6 +265,8 @@ def _interior(arr, ebox, around=None):
     x0, y0, x1, y1 = around or ebox
     pad = 12
     X0, Y0, X1, Y1 = max(0, x0 - pad), max(0, y0 - pad), min(W, x1 + pad), min(H, y1 + pad)
+    # text box bubble se bahar nikla ho to bhi khidki use poora ghere (warna mask ka size alag, page fail)
+    X0, Y0, X1, Y1 = min(X0, ebox[0]), min(Y0, ebox[1]), max(X1, ebox[2]), max(Y1, ebox[3])
     gray = cv2.cvtColor(arr[Y0:Y1, X0:X1], cv2.COLOR_RGB2GRAY)
     bright = (gray > 170).astype(np.uint8)
     n, labels, stats, _ = cv2.connectedComponentsWithStats(bright, connectivity=4)
