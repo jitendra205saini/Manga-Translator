@@ -81,41 +81,48 @@ isliye Hindi mein gender sahi aata hai: ladki bole to *"मैं थक गई"
 ## Kaise kaam karta hai
 
 ```mermaid
-flowchart LR
-    subgraph B[Browser extension]
-        direction TB
-        B1[Manga page<br/>Firefox / Chrome] --> B2[content.js<br/>poora chapter, upar se neeche<br/>5 pages ek saath + loading parda]
-        B2 --> B3[background.js<br/>page + upar / neeche ke webtoon tukde<br/>tab chhodne par bhi chalta rahe]
+flowchart TD
+    subgraph B["Browser extension"]
+        E1["Manga chapter khula<br/>Firefox / Chrome"] --> E2["Saare pages dhoondho<br/>lazy images + webtoon tukde bhi"] --> E3["Upar se neeche kram<br/>parda: कतार में"] --> E4["5 pages ek saath<br/>parda: spinner"] --> E5["background.js: page laao<br/>+ upar / neeche ke tukde<br/>site ke Referer ke saath"]
     end
 
-    subgraph S[Local server :47391]
-        direction TB
-        S1{Cache mein?<br/>image hash ya URL} -->|nahi| S2[Padosi tukde jodo]
-        S2 --> S3[OCR<br/>Windows OCR · PaddleOCR ko/zh<br/>manga-ocr ja]
-        S3 --> S4[ML detector<br/>bubbles + text boxes]
-        S4 --> S5[Bubble usi page ka<br/>jisme uska beech hai]
-        S5 --> S6[Batcher<br/>3 pages tak]
+    subgraph S["Local server :47391"]
+        S0{"URL ya image<br/>pehle se translate?"}
+        S1["Padosi tukde jodo<br/>500 px upar + neeche"] --> S2{"Language pata hai?<br/>popup / series memory"}
+        S2 -->|nahi| S3["Language pehchano<br/>ja → ko → zh → en"] --> S4
+        S2 -->|haan| S4["OCR<br/>Windows OCR · PaddleOCR ko/zh"]
+        S4 --> S5["RT-DETR detector<br/>bubbles + text boxes"] --> S6["Japanese: manga-ocr<br/>har box padhe"] --> S7["Lines ko bubbles mein<br/>padhne ka kram"] --> S8["Sirf wo bubble jinka beech<br/>is page par hai"]
     end
 
-    subgraph A[AI translation]
-        direction TB
-        A1[Gemini Flash-Lite<br/>kai keys, baari baari] -.->|limit / error| A2[Groq<br/>vision model]
-        A2 -.->|fail| A3[Local NLLB]
+    subgraph A["AI translation"]
+        A0["Batcher<br/>3 pages tak, 1 request"] --> A1["Gemini Flash-Lite<br/>keys baari baari"]
+        A1 -.->|limit / error| A2["Groq vision model"]
+        A1 --> A3{"Jawab sahi?<br/>Urdu / English nahi bachi"}
+        A2 --> A3
+        A3 -->|sudhaar| A4["Galat lines<br/>dobara poochho"] --> A3
+        A2 -.->|saari limit khatam| B0{"Backup switch on<br/>aur English page?"}
+        B0 -->|haan| B1["Backup translator<br/>IndicTrans2 API"]
+        B0 -->|nahi| B2["retry_after:<br/>page par samay dikhe,<br/>apne aap dobara"]
     end
 
-    subgraph R[Typesetting]
-        direction TB
-        R1[Text mitao + LaMa] --> R2[Hindi bubble mein fit<br/>Baloo 2 + raqm]
-        R2 --> R3[Apna page kaato +<br/>padosi ke liye patch]
+    subgraph R["Typesetting"]
+        R1["Text mitao<br/>LaMa inpainting"] --> R2["Hindi bubble mein fit<br/>Baloo 2 + raqm"]
+        R2 --> R3["Apna page kaato<br/>+ padosi ke patch"] --> R4["Cache mein rakho<br/>RAM + disk"]
     end
 
-    B3 --> S1
-    S6 --> A1
-    A1 --> R1
-    R3 -->|page + patch| B2
-    S1 -->|haan| B2
-    A1 -.->|saari limit khatam: retry_after| B2
+    E5 --> S0
+    S0 -->|nahi| S1
+    S8 -->|saath-saath| R1
+    S8 -->|saath-saath| A0
+    A3 -->|haan| R2
+    B1 --> R2
+    S0 -->|haan| X1
+    R4 --> X1["Hindi image lagao<br/>padosi par patch chipkao"]
+    B2 -.-> E3
+    X1 --> X2["Chapter khatam:<br/>agla chapter pehle se"]
 ```
+
+Har step detail mein (page ki yatra, server pipeline, webtoon tukde, AI limit, cache aur files) dekhne ke liye **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** padho.
 
 Har translated page disk par cache hota hai, aur characters ka gender har series ke liye `memory.json` mein yaad rehta hai.
 Original aur Hindi page ke beech badalne ke liye **Alt+O** dabao.

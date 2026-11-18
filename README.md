@@ -81,41 +81,48 @@ uses the correct gender: a girl says *"मैं थक गई"*, a boy says *"�
 ## How it works
 
 ```mermaid
-flowchart LR
-    subgraph B[Browser extension]
-        direction TB
-        B1[Manga page<br/>Firefox / Chrome] --> B2[content.js<br/>whole chapter, top to bottom<br/>5 pages at a time + loading overlay]
-        B2 --> B3[background.js<br/>page + webtoon strips above / below<br/>keeps going in a background tab]
+flowchart TD
+    subgraph B["Browser extension"]
+        E1["Manga chapter open<br/>Firefox / Chrome"] --> E2["Find every page<br/>incl. lazy images + webtoon strips"] --> E3["Queue top to bottom<br/>overlay: waiting"] --> E4["5 pages at a time<br/>overlay: spinner"] --> E5["background.js: fetch page<br/>+ strips above / below<br/>with site Referer"]
     end
 
-    subgraph S[Local server :47391]
-        direction TB
-        S1{Cached?<br/>image hash or URL} -->|no| S2[Stitch neighbour strips]
-        S2 --> S3[OCR<br/>Windows OCR · PaddleOCR ko/zh<br/>manga-ocr ja]
-        S3 --> S4[ML detector<br/>bubbles + text boxes]
-        S4 --> S5[Bubble belongs to the page<br/>holding its centre]
-        S5 --> S6[Batcher<br/>up to 3 pages]
+    subgraph S["Local server :47391"]
+        S0{"URL or image<br/>already translated?"}
+        S1["Stitch neighbour strips<br/>500 px above + below"] --> S2{"Language known?<br/>popup / series memory"}
+        S2 -->|no| S3["Detect language<br/>ja → ko → zh → en"] --> S4
+        S2 -->|yes| S4["OCR<br/>Windows OCR · PaddleOCR ko/zh"]
+        S4 --> S5["RT-DETR detector<br/>bubbles + text boxes"] --> S6["Japanese: manga-ocr<br/>reads each box"] --> S7["Group lines into bubbles<br/>reading order"] --> S8["Keep bubbles whose centre<br/>is on this page"]
     end
 
-    subgraph A[AI translation]
-        direction TB
-        A1[Gemini Flash-Lite<br/>several keys, rotated] -.->|limit / error| A2[Groq<br/>vision model]
-        A2 -.->|fails| A3[Local NLLB]
+    subgraph A["AI translation"]
+        A0["Batcher<br/>up to 3 pages, 1 request"] --> A1["Gemini Flash-Lite<br/>keys in rotation"]
+        A1 -.->|limit / error| A2["Groq vision model"]
+        A1 --> A3{"Answer OK?<br/>no Urdu, no English left"}
+        A2 --> A3
+        A3 -->|fix| A4["Ask again<br/>for bad lines"] --> A3
+        A2 -.->|all limits used| B0{"Backup switch on<br/>and English page?"}
+        B0 -->|yes| B1["Backup translator<br/>IndicTrans2 API"]
+        B0 -->|no| B2["retry_after:<br/>page shows wait time,<br/>retries by itself"]
     end
 
-    subgraph R[Typesetting]
-        direction TB
-        R1[Erase text + LaMa] --> R2[Fit Hindi to the bubble<br/>Baloo 2 + raqm]
-        R2 --> R3[Cut out own page +<br/>patches for neighbours]
+    subgraph R["Typesetting"]
+        R1["Erase text<br/>LaMa inpainting"] --> R2["Fit Hindi in bubble<br/>Baloo 2 + raqm"]
+        R2 --> R3["Cut own page<br/>+ patches for neighbours"] --> R4["Save to cache<br/>RAM + disk"]
     end
 
-    B3 --> S1
-    S6 --> A1
-    A1 --> R1
-    R3 -->|page + patches| B2
-    S1 -->|yes| B2
-    A1 -.->|all limits used: retry_after| B2
+    E5 --> S0
+    S0 -->|no| S1
+    S8 -->|in parallel| R1
+    S8 -->|in parallel| A0
+    A3 -->|yes| R2
+    B1 --> R2
+    S0 -->|yes| X1
+    R4 --> X1["Swap in Hindi image<br/>paste patches on neighbours"]
+    B2 -.-> E3
+    X1 --> X2["Chapter done:<br/>prefetch next chapter"]
 ```
+
+For every step in detail (page journey, server pipeline, webtoon strips, AI limits, caches and files), see **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
 Each translated page is cached on disk, and character genders are remembered per series in `memory.json`.
 Press **Alt+O** to switch between the original and the Hindi page.
