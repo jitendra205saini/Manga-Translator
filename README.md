@@ -58,25 +58,28 @@ uses the correct gender: a girl says *"मैं थक गई"*, a boy says *"�
 | Feature | Details |
 |---|---|
 | **Casual Hindi** | Natural spoken Hindi like anime dubs, not formal or bookish Hindi |
-| **Gender-aware** | Verbs match the speaker and the person being addressed |
-| **Character memory** | Remembers each character's gender per series (`memory.json`) |
-| **4 source languages** | Japanese, Korean, Chinese (Simplified / Traditional) and English, with auto-detect |
+| **Gender-aware** | The AI sees the page image, so verbs match the speaker and the person being addressed |
+| **Character memory** | Remembers each character's gender and the last 8 lines per series (`memory.json`) |
+| **4 source languages** | Japanese, Korean, Chinese (Simplified / Traditional) and English, with auto-detect that is locked per series once two pages agree |
+| **Strong OCR per language** | Windows 11 OCR, PaddleOCR v5 for Korean and Chinese, manga-ocr for Japanese (vertical text, furigana) |
 | **ML bubble detection** | An RT-DETR model finds bubbles, text inside bubbles and text on artwork, in about 0.1 s per page on the GPU |
-| **Clean typesetting** | Erases only the text pixels, rebuilds artwork with a manga-tuned LaMa model and fits Hindi to the bubble shape in a comic-style font, in the original text colour |
-| **Fallback chain** | Gemini → Groq (Qwen vision model, also sees the image) → local NLLB, so reading never stops when a free limit runs out |
-| **Firefox & Chrome** | Manifest V3 extension that works on any site, with an "Always on for this site" option |
-| **Fast reading** | Prefetches upcoming pages, translates 5 pages in parallel, erases text while the AI is answering, remembers each series' language and caches results on disk |
-| **Saves free quota** | Sends up to 3 pages in one AI request, so the free daily limit covers about 3 times more pages |
+| **Clean typesetting** | Erases only the text pixels; text on artwork is masked letter by letter and rebuilt with a manga-tuned LaMa model; Hindi is fitted to the bubble shape in a comic-style font |
+| **Original text colour** | Red text stays red, white text in a dark bubble stays white |
 | **Whole chapter, in order** | Translates every page from the top of the chapter to the bottom, wherever you scroll, with a loading overlay on each page that is still waiting |
 | **Keeps going in the background** | Carries on when you switch to another tab |
-| **Webtoon strips** | Sites that cut a long strip into many images often split a speech bubble in two. The extension sends the strips above and below too, so a split bubble is read whole and drawn back across both images |
-| **Better Korean / Chinese OCR** | PaddleOCR v5 (ONNX) reads Korean and Chinese; Japanese uses manga-ocr |
-| **Next chapter ready** | When a chapter is done, the first pages of the next chapter are translated in advance |
+| **Webtoon strips** | Sites that cut a long strip into many images often split a speech bubble in two. The strips above and below are sent too, so a split bubble is read whole and drawn back across both images |
+| **Next chapter ready** | When a chapter is done, the first 4 pages of the next chapter are translated in advance |
 | **Translate again** | Right-click a page and choose **Translate this page again** to skip the cache |
-| **Clear limit messages** | When every free AI limit is used up, each page shows when it will resume and continues on its own; the popup shows today's usage and when Google resets it |
+| **Saves free quota** | Up to 3 pages in one AI request, requests paced under the free per-minute limits, and a disk cache so re-opened chapters cost nothing |
 | **Several Gemini keys** | Add more than one key, separated by commas; a key that hits its limit rests and the next one is used |
+| **Fallback chain** | Gemini → Groq (vision model, also sees the image) → optional backup translator → local NLLB, so reading rarely stops |
+| **Backup translator** | Popup switch: when every AI limit is used up, English pages are translated by an IndicTrans2 web API. Not cached, so the AI redoes them later |
+| **Clear limit messages** | When every free AI limit is used up, each page shows when it will resume and continues on its own |
+| **Helpful popup** | Progress, today's usage, when Google resets the daily limit, extension and server versions, and "Server starting…" while the server boots |
+| **Firefox & Chrome** | Manifest V3 extension that works on any site, with an "Always on for this site" option; signed Firefox add-on |
 | **Original / Hindi toggle** | Press **Alt+O** to flip every page back to the original and again to Hindi |
-| **Local first** | Runs on `127.0.0.1`. API keys stay on your PC and are never committed |
+| **Easy install** | Windows installer, tray app that restarts the server and updates itself, clean uninstall |
+| **Local first** | Runs on `127.0.0.1:47391` (an uncommon port, so it does not clash with other AI tools). API keys stay on your PC and are never committed |
 
 ## How it works
 
@@ -238,7 +241,7 @@ flowchart TD
 | OCR | Windows 11 built-in OCR (`winrt`), `manga-ocr` ONNX for Japanese, PaddleOCR v5 ONNX for Korean / Chinese |
 | Bubble / text detection | `ogkalu/comic-text-and-bubble-detector` (RT-DETR-v2, ONNX Runtime + DirectML), OpenCV fallback |
 | Inpainting | Manga-tuned LaMa (`ogkalu/lama-manga-onnx-dynamic`), OpenCV fallback |
-| Translation | Google Gemini Flash-Lite, Groq (`openai/gpt-oss-120b`), Meta NLLB-200 600M (offline) |
+| Translation | Google Gemini Flash-Lite, Groq (`qwen/qwen3.8-27b` vision, `openai/gpt-oss-120b`), IndicTrans2 web API (backup, English), Meta NLLB-200 600M (offline) |
 | Rendering | Pillow + libraqm / FriBiDi, Baloo 2 (Noto Sans Devanagari fallback) |
 
 ## Project structure
@@ -247,24 +250,30 @@ flowchart TD
 manga-translator/
 ├── extension/                 # Firefox / Chrome extension
 │   ├── manifest.json
-│   ├── background.js          # fetches images, talks to the local server
-│   ├── content.js             # finds manga images on the page, swaps in translations
-│   └── popup.html / popup.js  # ON/OFF, language, "always on" and server status
+│   ├── content.js             # finds pages, queue in reading order, overlays, webtoon patches, prefetch
+│   ├── background.js          # fetches images with the right Referer, talks to the server, right-click menu
+│   └── popup.html / popup.js  # ON/OFF, language, Fast mode, Backup switch, progress, usage, versions
 ├── server/
-│   ├── server.py              # FastAPI app (POST /translate, GET /health)
-│   ├── translator.py          # pipeline: OCR -> group -> bubbles -> translate -> render
-│   ├── ocr_windows.py         # Windows OCR wrapper
+│   ├── server.py              # FastAPI: /translate, /health, /config, /setup
+│   ├── translator.py          # pipeline, webtoon stitching, caches
+│   ├── ocr_windows.py         # Windows 11 OCR
+│   ├── paddle_ocr.py          # PaddleOCR v5 (ONNX) for Korean / Chinese
 │   ├── mangaocr.py            # manga-ocr (ONNX) for Japanese
-│   ├── render.py              # bubble detection, text erasing and Hindi typesetting
-│   ├── llm.py                 # Gemini / Groq prompts, fallback, character memory
-│   ├── nllb.py                # offline NLLB fallback
-│   ├── detector.py            # ML bubble / text detector (ONNX, DirectML GPU)
-│   ├── inpaint.py             # LaMa inpainting for text on artwork
-│   ├── config.example.json    # copy to config.json and add your keys
-│   └── fonts/
-├── SETUP.bat                  # one-time setup
-├── START.bat                  # one-click start
-├── STOP.bat                   # stop the server
+│   ├── detector.py            # RT-DETR bubble / text detector (ONNX, DirectML GPU)
+│   ├── inpaint.py             # manga-tuned LaMa inpainting, text masks
+│   ├── render.py              # erasing, text colour, fitting and drawing Hindi
+│   ├── llm.py                 # prompt, batcher, Gemini / Groq, key rotation, limits, memory, usage
+│   ├── backup_api.py          # backup translator (English only)
+│   ├── nllb.py                # optional offline NLLB
+│   ├── tray.py / run.py       # tray icon, start / restart, update check
+│   ├── setup.html             # page for API keys
+│   ├── download_assets.py     # downloads fonts and models
+│   ├── check_setup.py         # checks GPU, fonts, OCR packs, models, keys
+│   └── config.example.json    # copy to config.json and add your keys
+├── installer/                 # Inno Setup script, install / stop scripts, signed Firefox add-on
+├── docs/                      # ARCHITECTURE.md and README images
+├── SETUP.bat                  # one-time setup (developers)
+├── START.bat / STOP.bat       # start / stop the server
 └── INSTALL_OCR_LANGUAGES.bat  # install Windows OCR language packs
 ```
 
@@ -330,18 +339,20 @@ SETUP.bat
 
 ## Usage
 
-1. Double-click `START.bat` (or the **Manga Translator** desktop shortcut it creates on first run).
-   It runs setup if needed, asks for an API key if none is set, and starts the server in the background.
-   Run `STOP.bat` to stop it.
+1. Start **Manga Translator** from the Start menu (it also starts at login and sits in the tray near the clock). Developers can double-click `START.bat`.
 2. Open a manga chapter in your browser.
 3. Click the extension icon and switch it **ON**, or press **Alt+T**.
-4. Scroll normally. Pages get an orange outline while they are being translated, then the Hindi version replaces them.
+4. The whole chapter is translated from top to bottom. Pages still waiting show **कतार में…**, the pages being translated show a spinner, and each one is swapped for the Hindi version when it is ready. You can scroll anywhere or switch tabs meanwhile.
 
 **Tips**
 
-- Tick **"Always on for this site"** to turn the translator on automatically for that site.
+- Tick **Always on for this site** to turn the translator on automatically for that site.
 - Pick a fixed language instead of **Auto** to make pages translate faster.
+- **Fast mode** uses Groq first: about twice as fast, the Hindi may be slightly less natural.
+- **Backup translator** keeps English manga going when every AI limit is used up.
+- Right-click a page and choose **Translate this page again** if a page came out wrong.
 - Press **Alt+O** (or the popup button) to compare with the original page.
+- For more pages per day, paste 2-3 Gemini keys from different Google accounts, separated by commas, on the setup page (**Change API keys** in the popup).
 
 ## Configuration
 
@@ -350,22 +361,30 @@ SETUP.bat
 | Key | Default | Description |
 |---|---|---|
 | `providers` | `["gemini", "groq", "nllb"]` | Order in which translators are tried |
-| `gemini.api_key` | `""` | Your Gemini key (or set the `GEMINI_API_KEY` environment variable) |
+| `gemini.api_key` | `""` | Your Gemini key. Several keys separated by commas are used in turn (or set `GEMINI_API_KEY`) |
 | `gemini.model` | Flash-Lite models | One model or a list. The next one is tried if a model is busy |
+| `gemini.daily_limit` | `500` | Requests per key per day shown in the popup |
+| `gemini_rpm` | `14` | Requests per minute per Gemini key |
 | `groq.api_key` | `""` | Your Groq key (or set `GROQ_API_KEY`) |
 | `groq.model` | `["qwen/qwen3.8-27b", "openai/gpt-oss-120b"]` | One model or a list, tried in order |
 | `groq.vision_models` | `["qwen/qwen3.8-27b"]` | Models that also receive the page image, so gender works on the fallback too |
+| `groq_rpm` | `25` | Requests per minute for Groq |
+| `backup.api_key` | `""` | Key for the backup translator (also on the setup page) |
+| `backup.url` | IndicTrans2 API | Backup translator address |
 | `image_max_side` | `1024` | Size of the image sent to the AI. Smaller uses fewer tokens |
 | `batch_pages` | `3` | Up to this many pages are translated in one AI request |
-| `batch_wait` | `1.5` | Seconds to wait for more pages before sending a request |
+| `batch_wait` | `0.6` | Seconds to wait for more pages before sending a request |
 
 ## Troubleshooting
 
 | Problem | Fix |
 |---|---|
-| Popup says the server is down | Double-click `START.bat` |
-| Hindi matras look broken | Run `SETUP.bat` again, then `check_setup.py` should show `Hindi shaping: OK (raqm)` |
-| Pages stay in English | Check the server window for errors. Gemini's free daily limit may be used up; Groq is used next |
+| Popup says **Server starting…** | Wait a few seconds; the popup checks every 2 s and updates by itself |
+| Popup says the server is not running | Start **Manga Translator** from the Start menu, or right-click the tray icon and choose Restart |
+| Popup shows a version mismatch | Update the older part: the browser add-on or the installed app |
+| Pages show **AI ki free limit khatam** | Wait (they resume by themselves), add more Gemini keys, or turn on the Backup translator for English |
+| A bubble split across two images is wrong | Right-click the page and choose **Translate this page again** after both images have loaded |
+| Hindi matras look broken | Run `check_setup.py`; it should show `Hindi shaping: OK (raqm)` |
 | Wrong gender for a character | Edit that character in `server/memory.json` (`"m"` or `"f"`) |
 | "model not found" in the log | Change the model name in `config.json` |
 
@@ -381,28 +400,36 @@ gender (`m` / `f` / `u`). The original and translated versions of the last 40 pa
 
 ## Known limitations
 
-- Windows OCR struggles with very stylized, italic or vertical text. Gemini reads those bubbles from the image instead.
+- Windows OCR struggles with very stylized, italic or vertical text in English. Gemini reads those bubbles from the image instead.
 - LaMa inpainting runs on the CPU (about 0.3 to 1.5 s per text block on artwork), because it does not run on DirectML. It runs while the AI request is in flight, so it adds little extra time.
 - Very small bubbles get small Hindi text, because Hindi is usually longer than the English it replaces.
-- Gemini's free tier has a daily request limit, which is set per project in Google AI Studio.
+- Gemini's free tier has a daily request limit per Google project. It resets at midnight Pacific time (about 1:30 PM in India).
+- The backup translator works only for English, gives formal Hindi and does not follow gender.
+- The art-text mask can also remove small marks drawn right next to a sound effect.
 
 ## Roadmap
 
 - [x] ML bubble and text detector (`comic-text-and-bubble-detector`)
-- [x] LaMa inpainting for text drawn on artwork
-- [x] Parallel AI requests, one page each (about 5-10 s per page)
-- [x] Disk cache, so re-opened chapters cost no requests
+- [x] LaMa inpainting for text drawn on artwork, now the manga-tuned model
+- [x] Letter-level text mask on artwork and original text colour (from comic-translate)
+- [x] Batched AI requests, 3 pages each, paced under free limits
+- [x] Disk cache, URL cache and in-progress sharing
 - [x] Comic-style Devanagari font (Baloo 2)
 - [x] Original / Hindi toggle (Alt+O)
-- [x] Windows installer and clean uninstaller
-- [x] System tray app with one-click auto-update
-- [x] Re-ask for bubbles the AI left empty
-- [x] API key setup page (no key needed during install)
+- [x] Windows installer, clean uninstaller, tray app with one-click auto-update
+- [x] Re-ask for bubbles the AI left empty, in Urdu script or still in English
+- [x] API key setup page, several Gemini keys in rotation
 - [x] Sound effects in bold comic style (धड़ाम!, थप!)
-- [x] Today's usage and Gemini quota in the popup
-- [x] `manga-ocr` (ONNX, no PyTorch) for Japanese: vertical text, furigana, stylized fonts
-- [x] PaddleOCR v5 for Korean / Chinese
+- [x] `manga-ocr` (ONNX) for Japanese, PaddleOCR v5 for Korean / Chinese
+- [x] Whole chapter in reading order with loading overlays, also in background tabs
+- [x] Webtoon strips: split bubbles read whole and drawn across both images
+- [x] Next chapter prefetch, right-click retranslate
+- [x] Clear limit messages, Google reset time, versions and server-starting state in the popup
+- [x] Backup translator for English when every AI limit is used up
+- [x] Uncommon server port (47391)
 - [x] Signed Firefox add-on (permanent install, `installer/signed/manga-translator.xpi`)
+- [ ] Consistent character names across a series
+- [ ] Better text size and line breaks in small bubbles
 
 ## License
 

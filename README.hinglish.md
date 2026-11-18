@@ -58,25 +58,28 @@ isliye Hindi mein gender sahi aata hai: ladki bole to *"मैं थक गई"
 | Feature | Details |
 |---|---|
 | **Casual Hindi** | Anime dub jaisi bolchaal wali Hindi, shuddh ya kitabi Hindi nahi |
-| **Gender ke hisaab se** | Verb bolne wale aur sunne wale ke gender se match karte hain |
-| **Character memory** | Har series mein characters ka gender yaad rakhta hai (`memory.json`) |
-| **4 languages** | Japanese, Korean, Chinese (Simplified / Traditional) aur English, Auto-detect ke saath |
+| **Gender ke hisaab se** | AI page ki image dekhta hai, isliye verb bolne wale aur sunne wale ke gender se match karte hain |
+| **Character memory** | Har series mein characters ka gender aur pichhli 8 lines yaad rakhta hai (`memory.json`) |
+| **4 languages** | Japanese, Korean, Chinese (Simplified / Traditional) aur English, auto-detect ke saath; do pages milne par series ke liye lock |
+| **Har language ka achha OCR** | Windows 11 OCR, Korean aur Chinese ke liye PaddleOCR v5, Japanese ke liye manga-ocr (khada text, furigana) |
 | **ML bubble detection** | RT-DETR model bubbles, bubble ke andar ka text aur art ke upar ka text pehchanta hai, GPU par ~0.1 s per page |
-| **Saaf typesetting** | Sirf text ke pixels mitata hai, art ko manga par tuned LaMa model se wapas banata hai aur Hindi comic font mein, original text ke rang mein, bubble ki shape mein fit karta hai |
-| **Backup chain** | Gemini → Groq (Qwen vision model, image bhi dekhta hai) → local NLLB. Free limit khatam ho to bhi padhna nahi rukta |
-| **Firefox aur Chrome** | Manifest V3 extension, kisi bhi site par chalta hai, "Always on for this site" option ke saath |
-| **Tez padhai** | Aage ke pages pehle se, 5 pages ek saath, AI ke jawab ke dauraan hi text mitana, har series ki language yaad, aur disk cache |
-| **Free limit bachata hai** | Ek AI request mein 3 pages tak, isliye roz ki free limit mein ~3 guna pages |
+| **Saaf typesetting** | Sirf text ke pixel mitata hai; art ke upar ka text letter-letter mask hokar manga par tuned LaMa model se wapas banta hai; Hindi comic font mein bubble ki shape mein fit hoti hai |
+| **Asli text ka rang** | Laal text laal hi rehta hai, gehre bubble ka safed text safed |
 | **Poora chapter, kram se** | Chapter ka har page upar se neeche tak translate, aap kahin bhi scroll karo. Jo page baaki hai us par loading parda |
 | **Tab chhodne par bhi** | Doosre tab par jaane par bhi translation chalta rehta hai |
-| **Webtoon ke tukde** | Jo sites lambi patti ko kai tasveeron mein kaatti hain, wahan bubble do hisson mein bat jaata hai. Extension upar aur neeche ke tukde bhi bhejta hai, isliye kata bubble poora padha jaata hai aur dono tasveeron par sahi chipakta hai |
-| **Behtar Korean / Chinese OCR** | Korean aur Chinese PaddleOCR v5 (ONNX) se, Japanese manga-ocr se |
-| **Agla chapter pehle se** | Chapter khatam hote hi agle chapter ke pehle pages pehle se translate |
+| **Webtoon ke tukde** | Jo sites lambi patti ko kai tasveeron mein kaatti hain, wahan bubble do hisson mein bat jaata hai. Upar aur neeche ke tukde bhi jaate hain, isliye kata bubble poora padha jaata hai aur dono tasveeron par sahi chipakta hai |
+| **Agla chapter pehle se** | Chapter khatam hote hi agle chapter ke pehle 4 pages pehle se translate |
 | **Dobara translate** | Page par right-click karke **Translate this page again**, cache chhod ke naya anuvaad |
-| **Limit ka saaf message** | Saari free AI limit khatam ho to page par dikhta hai ki kab dobara shuru hoga, aur apne aap shuru hota hai. Popup mein aaj ka use aur Google ka reset time |
+| **Free limit bachata hai** | Ek AI request mein 3 pages tak, free per-minute limit ke andar pacing, aur disk cache, isliye dobara khole chapter muft |
 | **Kai Gemini keys** | Comma laga ke ek se zyada key daalo. Jis key ki limit khatam ho wo ruk jaati hai aur agli chalti hai |
+| **Backup chain** | Gemini → Groq (vision model, image bhi dekhta hai) → backup translator (switch se) → local NLLB, isliye padhna kam hi rukta hai |
+| **Backup translator** | Popup switch: saari AI limit khatam ho to English pages IndicTrans2 web API se. Cache nahi hota, isliye baad mein AI se dobara achha banta hai |
+| **Limit ka saaf message** | Saari free AI limit khatam ho to page par dikhta hai ki kab dobara shuru hoga, aur apne aap shuru hota hai |
+| **Kaam ka popup** | Progress, aaj ka use, Google ki daily limit kab reset hogi, extension aur server ka version, aur server chalu hote waqt "Server starting…" |
+| **Firefox & Chrome** | Manifest V3 extension, kisi bhi site par, "Always on for this site" option ke saath; signed Firefox add-on |
 | **Original / Hindi toggle** | **Alt+O** dabao, saare pages original aur phir Hindi mein badal jaate hain |
-| **Local first** | `127.0.0.1` par chalta hai. API keys aapke PC par hi rehti hain, kabhi commit nahi hoti |
+| **Aasaan install** | Windows installer, tray app jo server restart kare aur khud update ho, saaf uninstall |
+| **Local first** | `127.0.0.1:47391` par chalta hai (alag port, doosre AI tools se takraav nahi). API keys aapke PC par hi rehti hain, kabhi commit nahi hoti |
 
 ## Kaise kaam karta hai
 
@@ -238,7 +241,7 @@ flowchart TD
 | OCR | Windows 11 ka built-in OCR (`winrt`), Japanese ke liye `manga-ocr` ONNX, Korean / Chinese ke liye PaddleOCR v5 ONNX |
 | Bubble / text detection | `ogkalu/comic-text-and-bubble-detector` (RT-DETR-v2, ONNX Runtime + DirectML), OpenCV fallback |
 | Inpainting | Manga-tuned LaMa (`ogkalu/lama-manga-onnx-dynamic`), OpenCV fallback |
-| Translation | Google Gemini Flash-Lite, Groq (`openai/gpt-oss-120b`), Meta NLLB-200 600M (offline) |
+| Translation | Google Gemini Flash-Lite, Groq (`qwen/qwen3.8-27b` vision, `openai/gpt-oss-120b`), IndicTrans2 web API (backup, English), Meta NLLB-200 600M (offline) |
 | Hindi likhna | Pillow + libraqm / FriBiDi, Baloo 2 (Noto Sans Devanagari fallback) |
 
 ## Project structure
@@ -247,24 +250,30 @@ flowchart TD
 manga-translator/
 ├── extension/                 # Firefox / Chrome extension
 │   ├── manifest.json
-│   ├── background.js          # images laata hai, local server se baat karta hai
-│   ├── content.js             # page par manga images dhoondhta hai, translation lagata hai
-│   └── popup.html / popup.js  # ON/OFF, language, "hamesha ON" aur server status
+│   ├── content.js             # pages dhoondhe, padhne ke kram mein line, parda, webtoon patch, prefetch
+│   ├── background.js          # sahi Referer ke saath image laaye, server se baat, right-click menu
+│   └── popup.html / popup.js  # ON/OFF, language, Fast mode, Backup switch, progress, usage, version
 ├── server/
-│   ├── server.py              # FastAPI app (POST /translate, GET /health)
-│   ├── translator.py          # pipeline: OCR -> group -> bubbles -> translate -> render
-│   ├── ocr_windows.py         # Windows OCR wrapper
-│   ├── mangaocr.py            # manga-ocr (ONNX) for Japanese
-│   ├── render.py              # bubble detection, text mitana aur Hindi likhna
-│   ├── llm.py                 # Gemini / Groq prompts, backup chain, character memory
-│   ├── nllb.py                # offline NLLB backup
-│   ├── detector.py            # ML bubble / text detector (ONNX, DirectML GPU)
-│   ├── inpaint.py             # art ke upar ke text ke liye LaMa inpainting
-│   ├── config.example.json    # ise config.json naam se copy karke keys daalo
-│   └── fonts/
-├── SETUP.bat                  # ek baar ka setup
-├── START.bat                  # one-click start
-├── STOP.bat                   # stop the server
+│   ├── server.py              # FastAPI: /translate, /health, /config, /setup
+│   ├── translator.py          # pipeline, webtoon jodna, cache
+│   ├── ocr_windows.py         # Windows 11 OCR
+│   ├── paddle_ocr.py          # Korean / Chinese ke liye PaddleOCR v5 (ONNX)
+│   ├── mangaocr.py            # Japanese ke liye manga-ocr (ONNX)
+│   ├── detector.py            # RT-DETR bubble / text detector (ONNX, DirectML GPU)
+│   ├── inpaint.py             # manga LaMa inpainting, text mask
+│   ├── render.py              # mitana, text ka rang, Hindi fit karke likhna
+│   ├── llm.py                 # prompt, batcher, Gemini / Groq, keys ki baari, limit, memory, usage
+│   ├── backup_api.py          # backup translator (sirf English)
+│   ├── nllb.py                # optional offline NLLB
+│   ├── tray.py / run.py       # tray icon, start / restart, update check
+│   ├── setup.html             # API keys ka page
+│   ├── download_assets.py     # fonts aur models download
+│   ├── check_setup.py         # GPU, fonts, OCR packs, models, keys check
+│   └── config.example.json    # config.json bana ke keys daalo
+├── installer/                 # Inno Setup script, install / stop scripts, signed Firefox add-on
+├── docs/                      # ARCHITECTURE.md aur README ki tasveeren
+├── SETUP.bat                  # ek baar setup (developers)
+├── START.bat / STOP.bat       # server chalao / band karo
 └── INSTALL_OCR_LANGUAGES.bat  # Windows OCR language packs install
 ```
 
@@ -329,18 +338,20 @@ SETUP.bat
 
 ## Use kaise karein
 
-1. `START.bat` pe double-click karo (ya pehli baar ke baad desktop pe bana **Manga Translator** shortcut).
-   Zarurat ho to ye setup khud karega, key na ho to maangega, aur server background mein chala dega.
-   Band karna ho to `STOP.bat`.
+1. Start menu se **Manga Translator** kholo (ye login par khud chalta hai aur ghadi ke paas tray mein rehta hai). Developers `START.bat` chala sakte hain.
 2. Browser mein manga chapter kholo.
-3. Extension icon dabao aur **ON** karo, ya **Alt+T** dabao.
-4. Normal scroll karo. Translate hote waqt page par narangi border dikhega, phir Hindi wala page lag jaayega.
+3. Extension icon par click karke **ON** karo, ya **Alt+T** dabao.
+4. Poora chapter upar se neeche translate hota hai. Baaki pages par **कतार में…**, jo chal rahe hain un par spinner, aur taiyaar hote hi Hindi page lag jaata hai. Is beech kahin bhi scroll karo ya tab badlo.
 
 **Tips**
 
-- **"Always on for this site"** tick karo, us site par apne aap chalega.
-- **Auto** ki jagah language fix karoge to pages jaldi translate honge.
-- Original page se milane ke liye **Alt+O** dabao (ya popup ka button).
+- **Always on for this site** tick karo to us site par apne aap ON.
+- **Auto** ki jagah language chun lo to pages jaldi bante hain.
+- **Fast mode** Groq pehle chalata hai: ~2 guna tez, Hindi thodi kam natural ho sakti hai.
+- **Backup translator** saari AI limit khatam hone par bhi English manga chalu rakhta hai.
+- Koi page galat bana ho to right-click karke **Translate this page again**.
+- Original se milane ke liye **Alt+O** (ya popup ka button).
+- Roz zyada pages ke liye setup page par (popup mein **Change API keys**) alag Google accounts ki 2-3 Gemini keys comma laga ke daalo.
 
 ## Configuration
 
@@ -348,24 +359,32 @@ SETUP.bat
 
 | Key | Default | Matlab |
 |---|---|---|
-| `providers` | `["gemini", "groq", "nllb"]` | Translators kis order mein try honge |
-| `gemini.api_key` | `""` | Aapki Gemini key (ya `GEMINI_API_KEY` environment variable) |
-| `gemini.model` | Flash-Lite models | Ek model ya list. Ek busy ho to agla try hota hai |
+| `providers` | `["gemini", "groq", "nllb"]` | Translators kis kram mein try hon |
+| `gemini.api_key` | `""` | Aapki Gemini key. Comma laga ke kai keys, baari baari chalti hain (ya `GEMINI_API_KEY`) |
+| `gemini.model` | Flash-Lite models | Ek model ya list. Model busy ho to agla |
+| `gemini.daily_limit` | `500` | Popup mein dikhne wali roz ki request per key |
+| `gemini_rpm` | `14` | Har Gemini key ki per minute request |
 | `groq.api_key` | `""` | Aapki Groq key (ya `GROQ_API_KEY`) |
-| `groq.model` | `["qwen/qwen3.8-27b", "openai/gpt-oss-120b"]` | Ek model ya list, order mein try hote hain |
-| `groq.vision_models` | `["qwen/qwen3.8-27b"]` | Jin models ko page image bhi milti hai, taaki backup mein bhi gender sahi aaye |
-| `image_max_side` | `1024` | AI ko bheji image ka size. Chhota = kam tokens |
-| `batch_pages` | `3` | Ek AI request mein zyaada se zyaada itne pages |
-| `batch_wait` | `1.5` | Request bhejne se pehle aur pages ke liye kitne second ruke |
+| `groq.model` | `["qwen/qwen3.8-27b", "openai/gpt-oss-120b"]` | Ek model ya list, kram se |
+| `groq.vision_models` | `["qwen/qwen3.8-27b"]` | Jo models page image bhi lete hain, taaki backup par bhi gender sahi rahe |
+| `groq_rpm` | `25` | Groq ki per minute request |
+| `backup.api_key` | `""` | Backup translator ki key (setup page par bhi) |
+| `backup.url` | IndicTrans2 API | Backup translator ka address |
+| `image_max_side` | `1024` | AI ko bheji image ka size. Chhoti = kam tokens |
+| `batch_pages` | `3` | Ek AI request mein itne pages tak |
+| `batch_wait` | `0.6` | Request bhejne se pehle aur pages ka itne second intezaar |
 
 ## Troubleshooting
 
 | Dikkat | Hal |
 |---|---|
-| Popup mein server band dikhe | `START.bat` pe double-click karo |
-| Hindi ki matras tooti dikhein | `SETUP.bat` dobara chalao, phir `check_setup.py` mein `Hindi shaping: OK (raqm)` aana chahiye |
-| Pages English mein reh jaayein | Server window mein error dekho. Gemini ki free limit khatam ho sakti hai, tab Groq chalega |
-| Kisi character ka gender galat | `server/memory.json` mein us character ko `"m"` ya `"f"` kar do |
+| Popup mein **Server starting…** | Kuch second ruko; popup har 2 s check karta hai aur khud badal jaata hai |
+| Popup kahe server nahi chal raha | Start menu se **Manga Translator** kholo, ya tray icon par right-click karke Restart |
+| Popup mein version mismatch | Jo purana hai use update karo: browser add-on ya installed app |
+| Pages par **AI ki free limit khatam** | Ruko (apne aap shuru honge), aur Gemini keys daalo, ya English ke liye Backup translator on karo |
+| Do tasveeron mein kata bubble galat | Dono tasveeren load hone ke baad right-click karke **Translate this page again** |
+| Hindi ki matras tooti dikhen | `check_setup.py` chalao; `Hindi shaping: OK (raqm)` aana chahiye |
+| Character ka gender galat | `server/memory.json` mein us character ko badlo (`"m"` ya `"f"`) |
 | Log mein "model not found" | `config.json` mein model ka naam badlo |
 
 Setup kabhi bhi check karne ke liye:
@@ -380,28 +399,36 @@ Debug ke liye server log mein har page ki language, kaunsa provider chala aur ha
 
 ## Kamiyan (Known limitations)
 
-- Windows OCR bahut stylish, italic ya khade (vertical) text ko theek se nahi padhta. Aisi bubbles Gemini image se padh leta hai.
+- Windows OCR bahut stylish, tircha ya khada English text theek se nahi padhta. Gemini aise bubbles image se padh leta hai.
 - LaMa inpainting CPU par chalta hai (art ke upar har text block ke liye ~0.3 se 1.5 s), kyunki ye DirectML par nahi chalta. Ye AI ke jawab ke intezaar ke saath chalta hai, isliye extra time kam lagta hai.
-- Bahut chhoti bubbles mein Hindi chhoti aati hai, kyunki Hindi aksar English se lambi hoti hai.
-- Gemini ki free tier mein roz ki request limit hai, jo Google AI Studio mein har project ke liye set hoti hai.
+- Bahut chhote bubbles mein Hindi chhoti aati hai, kyunki Hindi aksar English se lambi hoti hai.
+- Gemini free tier ki roz ki limit har Google project par hai. Ye Pacific time ki raat 12 baje (India mein ~1:30 PM) reset hoti hai.
+- Backup translator sirf English ke liye hai, formal Hindi deta hai aur gender ka dhyan nahi rakhta.
+- Art-text mask kabhi SFX ke bilkul paas bane chhote nishaan bhi mita sakta hai.
 
 ## Roadmap
 
 - [x] ML bubble aur text detector (`comic-text-and-bubble-detector`)
-- [x] Art ke upar text ke liye LaMa inpainting
-- [x] AI requests ek saath, har page alag (page ~5-10 second)
-- [x] Disk cache: dobara khole chapter par request kharch nahi
-- [x] Comic style Devanagari font (Baloo 2)
+- [x] Art ke upar text ke liye LaMa inpainting, ab manga wala model
+- [x] Art par letter-level text mask aur asli text ka rang (comic-translate se)
+- [x] Batched AI requests, 3 pages ek saath, free limit ke andar pacing
+- [x] Disk cache, URL cache aur chal rahe page ka saajha
+- [x] Comic-style Devanagari font (Baloo 2)
 - [x] Original / Hindi toggle (Alt+O)
-- [x] Windows installer aur saaf uninstaller
-- [x] System tray app, ek click auto-update
-- [x] AI ne jo bubble khaali chhoda use dobara puchna
-- [x] API key ka setup page (install ke waqt key nahi chahiye)
-- [x] Sound effects mote comic style mein (धड़ाम!, थप!)
-- [x] Popup mein aaj ka hisaab aur Gemini quota
-- [x] Japanese ke liye `manga-ocr` (ONNX, bina PyTorch): khada text, furigana, stylish font
-- [x] Korean / Chinese ke liye PaddleOCR v5
-- [x] Signed Firefox add-on (hamesha installed, `installer/signed/manga-translator.xpi`)
+- [x] Windows installer, saaf uninstaller, ek click auto-update wala tray app
+- [x] AI ne khaali, Urdu lipi mein ya English mein chhode bubble dobara poochhna
+- [x] API key setup page, kai Gemini keys baari baari
+- [x] Sound effects bold comic style mein (धड़ाम!, थप!)
+- [x] Japanese ke liye `manga-ocr` (ONNX), Korean / Chinese ke liye PaddleOCR v5
+- [x] Poora chapter padhne ke kram mein, loading parde ke saath, background tab mein bhi
+- [x] Webtoon tukde: kata bubble poora padha aur dono tasveeron par bana
+- [x] Agla chapter pehle se, right-click se dobara translate
+- [x] Limit ka saaf message, Google reset time, version aur server-starting popup mein
+- [x] Saari AI limit khatam hone par English ke liye backup translator
+- [x] Alag server port (47391)
+- [x] Signed Firefox add-on (hamesha ke liye install, `installer/signed/manga-translator.xpi`)
+- [ ] Poori series mein characters ke naam ek jaise
+- [ ] Chhote bubbles mein behtar text size aur line todna
 
 ## License
 
