@@ -36,9 +36,9 @@ Japanese · Korean · Chinese · English → हिन्दी
 
 | Webtoon: split bubble, before | After |
 |---|---|
-| <img src="docs/webtoon_before.jpg" width="420"> | <img src="docs/webtoon_after.jpg" width="420"> |
+| <img src="docs/webtoon_before.png" width="420"> | <img src="docs/webtoon_after.png" width="420"> |
 
-*Asli webtoon page jise site ne alag tasveeron mein kaata. Teen bubble kat ke do tasveeron mein the; har ek poora padha gaya aur dono par sahi bana.*
+*Is README ke liye banaya demo, jise webtoon sites ki tarah laal line par do tasveeron mein kaata gaya hai. Beech wala bubble cut ke aar-paar hai; wo poora padha gaya aur dono tasveeron par sahi bana.*
 
 </div>
 

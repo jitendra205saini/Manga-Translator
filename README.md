@@ -36,9 +36,9 @@ Japanese · Korean · Chinese · English → हिन्दी
 
 | Webtoon: split bubble, before | After |
 |---|---|
-| <img src="docs/webtoon_before.jpg" width="420"> | <img src="docs/webtoon_after.jpg" width="420"> |
+| <img src="docs/webtoon_before.png" width="420"> | <img src="docs/webtoon_after.png" width="420"> |
 
-*A real webtoon page that the site split into separate images. Three bubbles cross the cut; each is read whole and drawn back across both images.*
+*Demo strip made for this README, cut into two images at the red line the way webtoon sites do. The middle bubble crosses the cut; it is read whole and drawn back across both images.*
 
 </div>
 
