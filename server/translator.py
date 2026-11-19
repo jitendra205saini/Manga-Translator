@@ -104,9 +104,9 @@ def _area(b):
     return max(1, (b[2] - b[0]) * (b[3] - b[1]))
 
 
-def ml_groups(img, lines, lang):
+def ml_groups(img, lines, lang, dets=None):
     """ML detector se text regions; OCR lines unme baanto. Region ka OCR na mile to AI image se padhega."""
-    dets = detector.detect(img)
+    dets = detector.detect(img) if dets is None else dets
     bubbles = [d["box"] for d in dets if d["label"] == "bubble"]
     # ek hi text ke kai (overlapping) boxes: sirf sabse pakka rakho
     keep = []
@@ -354,6 +354,18 @@ async def _translate_page(raw, key, lang_choice, page_url, fast, prev_raws=None,
         print(f"[translate] {img.size} patli patti, padosi nahi mile: chhodi")
         return {"image": None, "lang": "", "bubbles": 0}
 
+    # pehle detector (GPU ~0.1 s): is page par koi text hi nahi to OCR / AI ka time mat lagao
+    if not detector.available():
+        raise RuntimeError("Bubble detector model nahi mila. Installer / SETUP.bat dobara chalao.")
+    dets = await asyncio.to_thread(detector.detect, img)
+    own_text = [d for d in dets if d["label"] != "bubble"
+                and L <= (d["box"][1] + d["box"][3]) / 2 < L + own_h]
+    if not own_text:
+        print(f"[translate] {img.size} koi text nahi: chhoda ({time.time() - t0:.1f}s)")
+        if L or R:  # padosi ka kata bubble is par chipkana pad sakta hai: asli image lautao
+            return {"image": _b64png(img.crop((0, L, own_w, L + own_h))), "lang": "", "bubbles": 0, "provider": "none"}
+        return {"image": None, "lang": "", "bubbles": 0}
+
     async with _ocr_lock:
         t_ocr = time.time()
         skey = llm.series_key(page_url)
@@ -383,7 +395,7 @@ async def _translate_page(raw, key, lang_choice, page_url, fast, prev_raws=None,
         t_ocr = time.time() - t_ocr
         if not detector.available():
             raise RuntimeError("Bubble detector model nahi mila. Installer / SETUP.bat dobara chalao.")
-        groups, lang = await asyncio.to_thread(ml_groups, img, lines, lang)
+        groups, lang = await asyncio.to_thread(ml_groups, img, lines, lang, dets)
         if lang == "ja" and lang_choice not in VALID_LANGS:
             _series_lang[skey] = "ja"
     if L or R:
