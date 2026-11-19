@@ -1,12 +1,14 @@
 # Purana text hatana + Hindi text box mein fit karke likhna
 import dllfix  # noqa: F401  (PIL se pehle)
 import os
+import re
 
 import cv2
 import numpy as np
 from PIL import ImageDraw, ImageFont, features
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+FONT_DIR = os.path.join(HERE, "fonts")
 FONT_CANDIDATES = [
     os.path.join(HERE, "fonts", "Baloo2.ttf"),  # comic jaisa, OFL license
     os.path.join(HERE, "fonts", "NotoSansDevanagari-Regular.ttf"),
@@ -18,19 +20,45 @@ HAS_RAQM = features.check("raqm")
 _fonts = {}
 
 
+# bubble ke style ke hisaab se Hindi font (sab SIL OFL, server/fonts mein): (file, variable weight)
+STYLE_FONTS = {
+    "shout": ("Baloo2.ttf", b"ExtraBold"),
+    "whisper": ("Baloo2.ttf", b"Regular"),
+    "thought": ("Kalam-Regular.ttf", None),
+    "narration": ("Hind-Medium.ttf", None),
+    "scary": ("YatraOne-Regular.ttf", None),
+    "elegant": ("RozhaOne-Regular.ttf", None),
+}
+STYLE_NAMES = ["normal", "shout", "whisper", "thought", "narration", "scary", "elegant"]
+_style = ["normal"]  # abhi kaunsa bubble likh rahe hain (render_ml set karta hai)
+
+
+def split_style(text):
+    """"\x02" + control char = AI ka bataya style (llm.style_mark). Return (style, text)."""
+    m = re.search("\x02([\x10-\x1f])", text or "")
+    if not m:
+        return "normal", text
+    i = ord(m.group(1)) - 0x10
+    return (STYLE_NAMES[i] if i < len(STYLE_NAMES) else "normal"), text.replace(m.group(0), "")
+
+
 def get_font(size, weight=b"SemiBold"):
     if FONT_PATH is None:
         raise RuntimeError("Devanagari font nahi mila. server/fonts mein NotoSansDevanagari-Regular.ttf rakho.")
-    font = _fonts.get((size, weight))
+    path = FONT_PATH
+    sf = STYLE_FONTS.get(_style[0])
+    if sf and os.path.exists(os.path.join(FONT_DIR, sf[0])) and weight == b"SemiBold":
+        path, weight = os.path.join(FONT_DIR, sf[0]), (sf[1] or weight)
+    font = _fonts.get((size, weight, path))
     if font is None:
         layout = ImageFont.Layout.RAQM if HAS_RAQM else ImageFont.Layout.BASIC
-        font = ImageFont.truetype(FONT_PATH, size, layout_engine=layout)
+        font = ImageFont.truetype(path, size, layout_engine=layout)
         try:
             if weight in font.get_variation_names():
                 font.set_variation_by_name(weight)
         except Exception:
             pass  # variable font nahi
-        _fonts[(size, weight)] = font
+        _fonts[(size, weight, path)] = font
     return font
 
 
@@ -202,7 +230,7 @@ def draw_in_mask(draw, text, mask, ox, oy, fg, bg, thickness, tbox=None):
         font = get_font(size)
         lh = int(size * 1.3)
         # alag-alag chaudai try karo: patli bubble mein zyada lines; lines barabar lambai ki
-        for frac in (0.95, 0.8, 0.65, 0.5):
+        for frac in (0.95, 0.8, 0.65, 0.5, 0.4, 0.32):
             lines = balanced_wrap(draw, text, font, bw * frac)
             widths = [draw.textlength(l, font=font) for l in lines]
             if _fits(area, cx, cy, lines, widths, lh):
@@ -312,7 +340,9 @@ def erase_ml(img, groups):
             bx0, by0, bx1, by1 = g["bbox"]
             bbg = bg_color(arr, (bx0 + (bx1 - bx0) // 4, by0 + (by1 - by0) // 4,
                                  bx1 - (bx1 - bx0) // 4, by1 - (by1 - by0) // 4), pad=0)
-            bg = (255, 255, 255) if luminance(bbg) > 200 else bbg
+            # lagbhag safed (rang nahi) = pura safed; halka peela / gulabi bubble apne rang mein hi bharo
+            chroma = max(bbg) - min(bbg)
+            bg = (255, 255, 255) if luminance(bbg) > 200 and chroma < 14 else bbg
             # text pixels mitao (bubble outline bachi rahe: sirf text box ke andar)
             m = inpaint.text_mask(arr, ebox, grow=3)
             if m is not None:
@@ -359,7 +389,40 @@ def erase_ml(img, groups):
                         inpaint.inpaint_region(arr, full, ebox)
                     bg = bg_color(arr, ebox, pad=2)
             plans.append(("box", ebox, None, 0, 0, bg, g["thickness"]))
+    _split_shared(plans, groups)
     return orig, arr, plans
+
+
+def _box_dist(box, x0, y0, w, h):
+    """(h, w) grid par har pixel ki box se doori (box ke andar 0). Grid ka kona (x0, y0) page par."""
+    xs = np.arange(x0, x0 + w, dtype=np.float32)[None, :]
+    ys = np.arange(y0, y0 + h, dtype=np.float32)[:, None]
+    dx = np.maximum(np.maximum(box[0] - xs, xs - box[2]), 0)
+    dy = np.maximum(np.maximum(box[1] - ys, ys - box[3]), 0)
+    return np.sqrt(dx * dx + dy * dy)
+
+
+def _split_shared(plans, groups):
+    """Jude hue bubbles (do safed bubble bina line ke mile hue): ek ki likhne wali jagah mein doosre ka
+    hissa bhi aa jaata hai, aur dono anuvaad ek hi jagah ek ke upar ek likhe jaate the.
+    Har pixel usi text ka jiske asli text box ke wo sabse paas hai."""
+    boxes = [g["box"] for g in groups]
+    for i, plan in enumerate(plans):
+        if plan[0] != "mask":
+            continue
+        kind, ebox, mask, ox, oy, bg, thick = plan
+        h, w = mask.shape
+        others = [b for j, b in enumerate(boxes) if j != i
+                  and b[0] < ox + w and b[2] > ox and b[1] < oy + h and b[3] > oy]
+        if not others:
+            continue
+        own = _box_dist(boxes[i], ox, oy, w, h)
+        keep = np.ones_like(mask, dtype=bool)
+        for b in others:
+            keep &= own <= _box_dist(b, ox, oy, w, h)
+        new = (mask.astype(bool) & keep).astype(mask.dtype)
+        if new.sum() >= 0.15 * max(1, mask.sum()):  # bahut chhota bacha to purana hi (galat baantne se bachav)
+            plans[i] = (kind, ebox, new, ox, oy, bg, thick)
 
 
 def text_color(crop):
@@ -412,17 +475,47 @@ def render_ml(img, groups, texts, pre=None):
     out = Image.fromarray(arr)
     draw = ImageDraw.Draw(out)
     for (kind, ebox, mask, ox, oy, bg, thick), text in zip(plans, texts):
-        sfx = is_sfx(text or "")
-        text = (text or "").replace("\x01", "").strip()
+        style, text = split_style(text or "")
+        sfx = is_sfx(text)
+        text = text.replace("\x01", "").strip()
         if not text:
             continue
         fg = _pick_fg(orig, ebox, bg)
-        if kind == "mask":
-            draw_in_mask(draw, text, mask, ox, oy, fg, bg, thick)
-        else:
-            if sfx:
-                draw_sfx(draw, text, ebox)
+        sigma = text_blur(orig, ebox)
+        # dhundhla original: Hindi alag layer par likho, utna hi dhundhla karke chipkao
+        layer = Image.new("RGBA", out.size, (0, 0, 0, 0)) if sigma else None
+        d = ImageDraw.Draw(layer) if layer is not None else draw
+        _style[0] = style
+        try:
+            if kind == "mask":
+                draw_in_mask(d, text, mask, ox, oy, fg, bg, thick)
             else:
-                sbg = (255, 255, 255) if luminance(fg) < 128 else (0, 0, 0)
-                draw_in_box(draw, text, ebox, fg, sbg, thick)
+                if sfx:
+                    draw_sfx(d, text, ebox)
+                else:
+                    sbg = (255, 255, 255) if luminance(fg) < 128 else (0, 0, 0)
+                    draw_in_box(d, text, ebox, fg, sbg, thick)
+        finally:
+            _style[0] = "normal"
+        if layer is not None:
+            from PIL import ImageFilter
+            out.paste(Image.alpha_composite(out.convert("RGBA"), layer.filter(ImageFilter.GaussianBlur(sigma))).convert("RGB"))
+            draw = ImageDraw.Draw(out)
     return out
+
+
+def text_blur(orig, box):
+    """Original text kitna dhundhla hai: Gaussian sigma (0 = saaf). Rang / contrast se fark nahi padta
+    (sabse tez kinare ki dhalaan / rang ka faasla). Saaf text ~4.1, sigma 1.5 ~2.1, sigma 2.5 ~1.5."""
+    x0, y0, x1, y1 = box
+    crop = orig[y0:y1, x0:x1]
+    if crop.size == 0 or min(crop.shape[:2]) < 10:
+        return 0
+    g = cv2.cvtColor(crop, cv2.COLOR_RGB2GRAY).astype(np.float32)
+    rng = np.percentile(g, 98) - np.percentile(g, 2)
+    if rng < 40:  # text hi nahi / bahut halka
+        return 0
+    gx, gy = cv2.Sobel(g, cv2.CV_32F, 1, 0), cv2.Sobel(g, cv2.CV_32F, 0, 1)
+    s = float(np.percentile(np.sqrt(gx * gx + gy * gy), 99.5) / (rng + 1))
+    sigma = (4.15 / max(s, 0.3) - 1) * 1.15
+    return round(min(sigma, 4), 1) if sigma >= 1.3 else 0

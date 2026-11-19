@@ -8,7 +8,7 @@
 
 Japanese · Korean · Chinese · English → हिन्दी
 
-<a href="https://github.com/jitendra205saini/Manga-Translator/releases/latest"><img alt="version" src="https://img.shields.io/badge/version-v2.8.3-blue"></a>
+<a href="https://github.com/jitendra205saini/Manga-Translator/releases/latest"><img alt="version" src="https://img.shields.io/badge/version-v2.9.0-blue"></a>
 <a href="https://www.python.org/downloads/"><img alt="python" src="https://img.shields.io/badge/python-3.13-3776AB?logo=python&logoColor=white"></a>
 <a href="https://github.com/jitendra205saini/Manga-Translator/blob/main/README.hinglish.md#kya-chahiye"><img alt="platform" src="https://img.shields.io/badge/platform-Windows%2011-0078D6?logo=windows&logoColor=white"></a>
 <a href="https://github.com/jitendra205saini/Manga-Translator/blob/main/README.hinglish.md#installation"><img alt="firefox" src="https://img.shields.io/badge/Firefox-supported-FF7139?logo=firefoxbrowser&logoColor=white"></a>
@@ -57,7 +57,7 @@ isliye Hindi mein gender sahi aata hai: ladki bole to *"मैं थक गई"
 
 | Feature | Details |
 |---|---|
-| **Casual Hindi** | Anime dub jaisi bolchaal wali Hindi, shuddh ya kitabi Hindi nahi |
+| **Casual Hindi** | Official Hindi dub jaisi bolchaal ki Hindi: shabd-dar-shabd nahi, matlab aur ehsaas, rozmarra ke shabdon ke saath. Pehle Gemini Flash chalta hai, aur har series ki kahani ka chhota saar context ke liye yaad rehta hai |
 | **Gender ke hisaab se** | AI page ki image dekhta hai, isliye verb bolne wale aur sunne wale ke gender se match karte hain |
 | **Character memory** | Har series mein characters ka gender, unke naam ki Hindi spelling aur pichhli 8 lines yaad rakhta hai (`memory.json`), isliye naam har page par ek jaisa likha jaata hai |
 | **4 languages** | Japanese, Korean, Chinese (Simplified / Traditional) aur English, auto-detect ke saath; do pages milne par series ke liye lock |
@@ -65,6 +65,8 @@ isliye Hindi mein gender sahi aata hai: ladki bole to *"मैं थक गई"
 | **ML bubble detection** | RT-DETR model bubbles, bubble ke andar ka text aur art ke upar ka text pehchanta hai, GPU par ~0.1 s per page |
 | **Saaf typesetting** | Sirf text ke pixel mitata hai; art ke upar ka text letter-letter mask hokar manga par tuned LaMa model se wapas banta hai; Hindi comic font mein bubble ki shape mein, jitni badi fit ho, barabar lambi lines mein |
 | **Asli text ka rang** | Laal text laal hi rehta hai, gehre bubble ka safed text safed |
+| **Style ke hisaab se font** | AI har bubble ka style batata hai aur Hindi usi jaise font mein: chillane par mota, dheere bolne par patla, sochne par haath ki likhawat, narration box mein saaf, darawne ya shaahi text ke liye sajawati |
+| **Dhundhla text bhi waisa hi** | Original text dhundhla ho to Hindi bhi utni hi dhundhli |
 | **Poora chapter, kram se** | Chapter ka har page upar se neeche tak translate, aap kahin bhi scroll karo. Jo page baaki hai us par loading parda |
 | **Tab chhodne par bhi** | Doosre tab par jaane par bhi translation chalta rehta hai |
 | **Webtoon ke tukde** | Jo sites lambi patti ko kai tasveeron mein kaatti hain, wahan bubble do hisson mein bat jaata hai. Upar aur neeche ke tukde bhi jaate hain, isliye kata bubble poora padha jaata hai aur dono tasveeron par sahi chipakta hai |
@@ -268,7 +270,7 @@ flowchart TD
 | Bubble / text detection | `ogkalu/comic-text-and-bubble-detector` (RT-DETR-v2, ONNX Runtime + DirectML), OpenCV fallback |
 | Inpainting | Manga-tuned LaMa (`ogkalu/lama-manga-onnx-dynamic`), OpenCV fallback |
 | Translation | Google Gemini Flash-Lite, Groq (`qwen/qwen3.8-27b` vision, `openai/gpt-oss-120b`), IndicTrans2 web API (backup, English), Meta NLLB-200 600M (offline) |
-| Hindi likhna | Pillow + libraqm / FriBiDi, Baloo 2 (Noto Sans Devanagari fallback) |
+| Hindi likhna | Pillow + libraqm / FriBiDi; bubble ke style se Baloo 2, Kalam, Hind, Yatra One, Rozha One (Noto Sans Devanagari fallback) |
 
 ## Project structure
 
@@ -458,12 +460,12 @@ Debug ke liye server log mein har page ki language, kaunsa provider chala aur ha
 
 ## License
 
-[MIT License](LICENSE) ke tahat. Saath ke fonts (Noto Sans Devanagari, Baloo 2) SIL Open Font License mein hain, aur download hone wale models Apache-2.0 mein.
+[MIT License](LICENSE) ke tahat. Saath ke fonts (Noto Sans Devanagari, Baloo 2, Kalam, Hind, Yatra One, Rozha One) SIL Open Font License mein hain, aur download hone wale models Apache-2.0 mein.
 
 ## Acknowledgements
 
 - Translation ke liye [Google Gemini](https://ai.google.dev/), [Groq](https://groq.com/) aur [Meta NLLB-200](https://huggingface.co/facebook/nllb-200-distilled-600M)
-- Hindi fonts ke liye [Baloo 2](https://fonts.google.com/specimen/Baloo+2) aur [Noto Sans Devanagari](https://fonts.google.com/noto/specimen/Noto+Sans+Devanagari)
+- Hindi fonts ke liye [Baloo 2](https://fonts.google.com/specimen/Baloo+2), [Kalam](https://fonts.google.com/specimen/Kalam), [Hind](https://fonts.google.com/specimen/Hind), [Yatra One](https://fonts.google.com/specimen/Yatra+One), [Rozha One](https://fonts.google.com/specimen/Rozha+One) aur [Noto Sans Devanagari](https://fonts.google.com/noto/specimen/Noto+Sans+Devanagari)
 - Bubble aur text pehchanne ke liye [ogkalu/comic-text-and-bubble-detector](https://huggingface.co/ogkalu/comic-text-and-bubble-detector)
 - Inpainting ke liye [LaMa](https://github.com/advimman/lama), [ogkalu ka manga par tuned ONNX model](https://huggingface.co/ogkalu/lama-manga-onnx-dynamic)
 - Art par text ka mask aur text ka rang pakadne ka tarika [comic-translate](https://github.com/ogkalu2/comic-translate) (Apache-2.0) se, `inpaint.py` aur `render.py` mein

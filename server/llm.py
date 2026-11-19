@@ -17,7 +17,7 @@ MEMORY_PATH = os.path.join(HERE, "memory.json")
 DEFAULT_CONFIG = {
     "providers": ["gemini", "groq", "nllb"],
     "backup": {"api_key": "", "url": ""},  # IndicTrans2 web API (sirf English), popup switch se
-    "gemini": {"api_key": "", "model": ["gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-flash-latest"]},  # har model ki din ki limit alag: ek khatam to agla
+    "gemini": {"api_key": "", "model": ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.1-flash-lite", "gemini-flash-latest"]},  # har model ki din ki limit alag: ek khatam to agla
     "groq": {"api_key": "", "model": ["qwen/qwen3.8-27b", "openai/gpt-oss-120b"],
              "vision_models": ["qwen/qwen3.8-27b"]},
     "image_max_side": 1024,
@@ -38,6 +38,7 @@ class BadKey(RuntimeError):
 _OLD_GEMINI_MODELS = [
     ["gemini-3.5-flash-lite", "gemini-flash-lite-latest"],
     ["gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-2.5-flash-lite"],
+    ["gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-flash-latest"],
 ]
 
 
@@ -83,6 +84,15 @@ def get_memory(key):
     m.setdefault("names", {})
     m.setdefault("alias", {})
     return m
+
+
+def set_summary(key, text):
+    """Kahani ab tak (AI har batch ke saath 1-2 line deta hai): agle pages ka lehja aur context."""
+    text = re.sub(r"\s+", " ", str(text or "")).strip()[:400]
+    if not text:
+        return
+    with _mem_lock:
+        _memory.setdefault(key, {"characters": {}, "recent": []})["summary"] = text
 
 
 def _norm_name(n):
@@ -179,6 +189,7 @@ Text bubbles (OCR output, may contain small OCR mistakes; box = [x0,y0,x1,y1] on
 
 {look}
 
+Story so far: {memory.get("summary") or "unknown (start of reading)"}
 Known characters in this series: {chars}
 Previous lines (for context):
 {recent}
@@ -187,6 +198,15 @@ Rules:
 - Write Hindi in Devanagari, the way young people actually talk in everyday life / Hindi anime dubs. NOT shuddh/bookish Hindi.
   Use common words people really say, including common English-origin words (जैसे: टाइम, प्लान, सॉरी, ओके, फ्रेंड, स्कूल) where natural.
   Bad: "मैं इस कार्य को संपन्न करने की इच्छा रखता हूँ"  Good: "मैं ये काम करना चाहता हूँ"
+  Write it like an official Hindi dub / a Hindi comic written in India, NOT a word-by-word translation.
+  Translate the MEANING and feeling, use natural Hindi sentence order, idioms and fillers people really use
+  (अरे, यार, अच्छा, चल, बस, क्या बात है, हाय राम, उफ़, सच में?). Short, punchy lines like real people talk.
+  Examples (English -> good casual Hindi):
+  "What are you doing here?!" -> "तू यहाँ क्या कर रहा है?!"   (bookish: "आप यहाँ क्या कर रहे हैं?")
+  "I can't believe this..." -> "यकीन ही नहीं हो रहा..."
+  "Leave me alone!" -> "मुझे अकेला छोड़ दो!"   "Shut up!" -> "चुप कर!"   "No way!" -> "हो ही नहीं सकता!"
+  "That's not fair." -> "ये तो गलत है यार।"   "Thank goodness..." -> "शुक्र है..."   "Seriously?" -> "सच में?"
+  "Don't get the wrong idea!" -> "ज़्यादा मत सोच!"   "As expected of you." -> "तुझसे यही उम्मीद थी।"
 - Verb and adjective gender MUST match the speaker: female speaker -> "मैं जा रही हूँ", "मैं थक गई"; male -> "मैं जा रहा हूँ", "मैं थक गया".
   Also match the gender of the person being addressed when Hindi needs it ("तू आ गई?" to a girl).
 - Choose तू / तुम / आप by relationship (friends/rivals: तू or तुम, elders/strangers/boss: आप).
@@ -204,9 +224,14 @@ Rules:
 - Sound effects (SFX): give a short Hindi sound word (onomatopoeia), 1-2 words, like "धड़ाम!", "फड़फड़!", "थप!",
   "धक-धक", "सर्र!", "खट!" - never a verb or description ("फड़फड़ाना", "चलना" are wrong). Return "" if meaningless.
   Set "sfx": true for them. Dialogue, narration and captions are NOT sfx.
+- "style" = how this text LOOKS / is said in the image, so the Hindi gets a matching font:
+  "shout" (big / bold / jagged bubble, yelling), "whisper" (small, dotted or soft bubble), "thought" (cloud bubble,
+  inner monologue, handwritten note), "narration" (rectangle caption box, signs, letters, screens),
+  "scary" (horror, dripping or creepy lettering), "elegant" (royal, old-fashioned, fancy script), else "normal".
 
 Return ONLY JSON:
-{{"lines": [{{"id": 1, "gender": "m|f|u", "speaker": "name or empty", "hi": "Hindi text", "sfx": false}}],
+{{"lines": [{{"id": 1, "gender": "m|f|u", "speaker": "name or empty", "hi": "Hindi text", "sfx": false, "style": "normal"}}],
+  "summary": "1-2 short sentences in English: the story so far including these pages (who, where, what is happening)",
   "characters": {{"Name": {{"g": "m|f", "hi": "name in Devanagari"}}}}}}
 Put every named character who speaks or is named on these pages in "characters".
 Include every id exactly once."""
@@ -232,6 +257,18 @@ def mark_bubbles(img, groups, start=1):
 
 
 SFX_MARK = "\x01"
+# bubble ka style -> font (render.py): "\x02" + ek control char. Latin akshar nahi, taaki English-check na bigde
+STYLES = ["normal", "shout", "whisper", "thought", "narration", "scary", "elegant"]
+STYLE_MARK = "\x02"
+
+
+def style_mark(style):
+    s = str(style or "normal").strip().lower()
+    return STYLE_MARK + chr(0x10 + STYLES.index(s)) if s in STYLES and s != "normal" else ""
+
+
+def strip_marks(h):
+    return re.sub("\x02[\x10-\x1f]", "", (h or "").replace(SFX_MARK, ""))
 
 # ---------- aaj ka hisaab (popup mein dikhta hai) ----------
 USAGE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "usage.json")
@@ -624,12 +661,17 @@ def translate_pages(pages, lang, page_url="", fast=False, _retry=False, _waited=
             # SFX ka nishaan: render isse bada comic style mein likhta hai
             hindi = [SFX_MARK + h if h and by_id.get(i, {}).get("sfx") is True else h
                      for i, h in zip(range(1, total + 1), hindi)]
+            # style (chillana, sochna, narration...) ka nishaan: render usi hisaab se font chunta hai
+            hindi = [style_mark(by_id.get(i, {}).get("style")) + h if h else h
+                     for i, h in zip(range(1, total + 1), hindi)]
+            if data.get("summary"):
+                set_summary(key, data["summary"])
             if not any(hindi) and not by_id:
                 raise RuntimeError("koi translation nahi aayi")
             # AI ne bubbles pehchane par sab "" diye (watermark / bina text ka page): page waisa hi rahe, fail nahi
             _strikes[name] = 0
             usage_bump(name)
-            pairs = [[g["text"], h.lstrip(SFX_MARK)] for g, h in zip(all_groups, hindi) if h and g["text"]][-8:]
+            pairs = [[g["text"], strip_marks(h)] for g, h in zip(all_groups, hindi) if h and g["text"]][-8:]
             update_memory(key, None, pairs)
             genders = "".join(str(by_id.get(i, {}).get("gender", "u"))[:1] for i in range(1, total + 1))
             print(f"[{name}] {len(pages)} page(s), {total} bubbles, gender={genders}, {time.time() - t:.1f}s")
@@ -708,7 +750,7 @@ _URDU = {"ا": "ा", "آ": "आ", "ب": "ब", "پ": "प", "ت": "त", "ٹ": 
 
 def _still_english(h):
     # AI ne translate hi nahi kiya, English waisa hi lauta diya ("THANK YOU", "NO...!!")
-    h = (h or "").replace(SFX_MARK, "")
+    h = strip_marks(h)
     return len(re.findall(r"[A-Za-z]", h)) >= 2 and not re.search(r"[ऀ-ॿ]", h)
 
 

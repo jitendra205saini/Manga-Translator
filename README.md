@@ -8,7 +8,7 @@
 
 Japanese · Korean · Chinese · English → हिन्दी
 
-<a href="https://github.com/jitendra205saini/Manga-Translator/releases/latest"><img alt="version" src="https://img.shields.io/badge/version-v2.8.3-blue"></a>
+<a href="https://github.com/jitendra205saini/Manga-Translator/releases/latest"><img alt="version" src="https://img.shields.io/badge/version-v2.9.0-blue"></a>
 <a href="https://www.python.org/downloads/"><img alt="python" src="https://img.shields.io/badge/python-3.13-3776AB?logo=python&logoColor=white"></a>
 <a href="https://github.com/jitendra205saini/Manga-Translator/blob/main/README.md#requirements"><img alt="platform" src="https://img.shields.io/badge/platform-Windows%2011-0078D6?logo=windows&logoColor=white"></a>
 <a href="https://github.com/jitendra205saini/Manga-Translator/blob/main/README.md#installation"><img alt="firefox" src="https://img.shields.io/badge/Firefox-supported-FF7139?logo=firefoxbrowser&logoColor=white"></a>
@@ -57,7 +57,7 @@ uses the correct gender: a girl says *"मैं थक गई"*, a boy says *"�
 
 | Feature | Details |
 |---|---|
-| **Casual Hindi** | Natural spoken Hindi like anime dubs, not formal or bookish Hindi |
+| **Casual Hindi** | Natural spoken Hindi like an official Hindi dub: the meaning and feeling, not word by word, with everyday words and fillers. Gemini Flash goes first, and a short story-so-far summary is kept per series for context |
 | **Gender-aware** | The AI sees the page image, so verbs match the speaker and the person being addressed |
 | **Character memory** | Remembers each character's gender, the Hindi spelling of their name and the last 8 lines per series (`memory.json`), so a name is written the same way on every page |
 | **4 source languages** | Japanese, Korean, Chinese (Simplified / Traditional) and English, with auto-detect that is locked per series once two pages agree |
@@ -65,6 +65,8 @@ uses the correct gender: a girl says *"मैं थक गई"*, a boy says *"�
 | **ML bubble detection** | An RT-DETR model finds bubbles, text inside bubbles and text on artwork, in about 0.1 s per page on the GPU |
 | **Clean typesetting** | Erases only the text pixels; text on artwork is masked letter by letter and rebuilt with a manga-tuned LaMa model; Hindi is fitted to the bubble shape in a comic-style font, as large as fits, with lines of even length |
 | **Original text colour** | Red text stays red, white text in a dark bubble stays white |
+| **Font by style** | The AI tags each bubble's look and the Hindi uses a matching font: bold for shouting, light for whispers, handwritten for thoughts, clean for narration boxes, decorative for scary or royal text |
+| **Matches blurry text** | If the original text is blurred, the Hindi gets the same blur |
 | **Whole chapter, in order** | Translates every page from the top of the chapter to the bottom, wherever you scroll, with a loading overlay on each page that is still waiting |
 | **Keeps going in the background** | Carries on when you switch to another tab |
 | **Webtoon strips** | Sites that cut a long strip into many images often split a speech bubble in two. The strips above and below are sent too, so a split bubble is read whole and drawn back across both images |
@@ -268,7 +270,7 @@ flowchart TD
 | Bubble / text detection | `ogkalu/comic-text-and-bubble-detector` (RT-DETR-v2, ONNX Runtime + DirectML), OpenCV fallback |
 | Inpainting | Manga-tuned LaMa (`ogkalu/lama-manga-onnx-dynamic`), OpenCV fallback |
 | Translation | Google Gemini Flash-Lite, Groq (`qwen/qwen3.8-27b` vision, `openai/gpt-oss-120b`), IndicTrans2 web API (backup, English), Meta NLLB-200 600M (offline) |
-| Rendering | Pillow + libraqm / FriBiDi, Baloo 2 (Noto Sans Devanagari fallback) |
+| Rendering | Pillow + libraqm / FriBiDi; Baloo 2, Kalam, Hind, Yatra One, Rozha One by bubble style (Noto Sans Devanagari fallback) |
 
 ## Project structure
 
@@ -459,12 +461,12 @@ gender (`m` / `f` / `u`). The original and translated versions of the last 40 pa
 
 ## License
 
-Released under the [MIT License](LICENSE). The bundled fonts (Noto Sans Devanagari, Baloo 2) are under the SIL Open Font License, and the downloaded models are under Apache-2.0.
+Released under the [MIT License](LICENSE). The bundled fonts (Noto Sans Devanagari, Baloo 2, Kalam, Hind, Yatra One, Rozha One) are under the SIL Open Font License, and the downloaded models are under Apache-2.0.
 
 ## Acknowledgements
 
 - [Google Gemini](https://ai.google.dev/), [Groq](https://groq.com/) and [Meta NLLB-200](https://huggingface.co/facebook/nllb-200-distilled-600M) for translation
-- [Baloo 2](https://fonts.google.com/specimen/Baloo+2) and [Noto Sans Devanagari](https://fonts.google.com/noto/specimen/Noto+Sans+Devanagari) for the Hindi fonts
+- [Baloo 2](https://fonts.google.com/specimen/Baloo+2), [Kalam](https://fonts.google.com/specimen/Kalam), [Hind](https://fonts.google.com/specimen/Hind), [Yatra One](https://fonts.google.com/specimen/Yatra+One), [Rozha One](https://fonts.google.com/specimen/Rozha+One) and [Noto Sans Devanagari](https://fonts.google.com/noto/specimen/Noto+Sans+Devanagari) for the Hindi fonts
 - [ogkalu/comic-text-and-bubble-detector](https://huggingface.co/ogkalu/comic-text-and-bubble-detector) for bubble and text detection
 - [LaMa](https://github.com/advimman/lama), using the [manga-tuned ONNX model by ogkalu](https://huggingface.co/ogkalu/lama-manga-onnx-dynamic), for inpainting
 - [comic-translate](https://github.com/ogkalu2/comic-translate) (Apache-2.0) for the text mask on artwork and the text colour detection, adapted in `inpaint.py` and `render.py`

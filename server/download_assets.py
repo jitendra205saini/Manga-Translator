@@ -110,6 +110,28 @@ def get_models():
             raise SystemExit(1)
 
 
+# bubble ke style ke hisaab se fonts (render.STYLE_FONTS), sab Google Fonts, SIL OFL
+STYLE_FONTS = ["kalam/Kalam-Regular.ttf", "kalam/Kalam-Bold.ttf", "hind/Hind-Medium.ttf",
+               "yatraone/YatraOne-Regular.ttf", "rozhaone/RozhaOne-Regular.ttf"]
+
+
+def get_style_fonts():
+    for f in STYLE_FONTS:
+        dst = os.path.join(HERE, "fonts", os.path.basename(f))
+        if os.path.exists(dst):
+            continue
+        try:
+            urllib.request.urlretrieve("https://github.com/google/fonts/raw/main/ofl/" + f, dst)
+            with open(dst, "rb") as fh:
+                if fh.read(4) not in (b"\x00\x01\x00\x00", b"OTTO", b"true"):
+                    raise ValueError("downloaded file font nahi lagti")
+            print(f"[font] {os.path.basename(f)} download ho gaya")
+        except Exception as e:
+            if os.path.exists(dst):
+                os.remove(dst)
+            print(f"[font] {os.path.basename(f)} fail ({e}). Us style par Baloo 2 chalega.")
+
+
 def get_comic_font():
     dst = os.path.join(HERE, "fonts", "Baloo2.ttf")
     if os.path.exists(dst):
@@ -138,6 +160,7 @@ if __name__ == "__main__":
     make_config()
     get_font()
     get_comic_font()
+    get_style_fonts()
     get_models()
     import sys
     if "--no-nllb" not in sys.argv:

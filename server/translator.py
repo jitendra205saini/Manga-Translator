@@ -136,7 +136,8 @@ def ml_groups(img, lines, lang, dets=None):
         if d["label"] == "text_bubble":
             cands = [b for b in bubbles if _center_in(box, b, pad=0)]
             if cands:
-                bbox = min(cands, key=_area)
+                # jude / chadhe hue bubbles: jisme text ka sabse bada hissa aata hai wahi (barabar ho to chhota)
+                bbox = max(cands, key=lambda b: (round(_overlap_frac(box, b), 2), -_area(b)))
         th = statistics.median([_thick(l["box"]) for l in mine]) if mine else             max(16, min(40, min(box[2] - box[0], box[3] - box[1]) / 3))
         groups.append({"lines": mine, "text": text, "box": box, "bbox": bbox,
                        "kind": "bubble" if bbox else "free", "vertical": False, "thickness": th})
