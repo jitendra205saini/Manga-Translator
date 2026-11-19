@@ -348,6 +348,11 @@ async def _translate_page(raw, key, lang_choice, page_url, fast, prev_raws=None,
     img = Image.open(io.BytesIO(raw)).convert("RGB")
     own_w, own_h = img.size
     img, L, R, n_prev, n_next = _stitch(img, prev_raws, next_raws)
+    if own_h < 150 and not (L or R):
+        # webtoon ki patli patti akeli aayi (padosi tukde nahi mile): isme poora bubble ho hi nahi sakta,
+        # AI se anuvaad karwaya to galat Hindi patti par likh di jaati thi. Waisi hi chhod do.
+        print(f"[translate] {img.size} patli patti, padosi nahi mile: chhodi")
+        return {"image": None, "lang": "", "bubbles": 0}
 
     async with _ocr_lock:
         t_ocr = time.time()

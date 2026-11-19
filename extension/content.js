@@ -387,6 +387,10 @@
       } else if (res && res.error) {
         console.warn("[manga-tr]", res.error);
         retryLater(img);
+      } else if (res) {
+        // is page par translate karne ko kuch nahi (bina text ka page / patli patti): waisa hi rehne do
+        img.dataset.mtDone = "1";
+        ok = true;
       }
     } catch (e) {
       console.warn("[manga-tr]", e);

@@ -8,7 +8,7 @@
 
 Japanese · Korean · Chinese · English → हिन्दी
 
-<a href="https://github.com/jitendra205saini/Manga-Translator/releases/latest"><img alt="version" src="https://img.shields.io/badge/version-v2.8.2-blue"></a>
+<a href="https://github.com/jitendra205saini/Manga-Translator/releases/latest"><img alt="version" src="https://img.shields.io/badge/version-v2.8.3-blue"></a>
 <a href="https://www.python.org/downloads/"><img alt="python" src="https://img.shields.io/badge/python-3.13-3776AB?logo=python&logoColor=white"></a>
 <a href="https://github.com/jitendra205saini/Manga-Translator/blob/main/README.md#requirements"><img alt="platform" src="https://img.shields.io/badge/platform-Windows%2011-0078D6?logo=windows&logoColor=white"></a>
 <a href="https://github.com/jitendra205saini/Manga-Translator/blob/main/README.md#installation"><img alt="firefox" src="https://img.shields.io/badge/Firefox-supported-FF7139?logo=firefoxbrowser&logoColor=white"></a>

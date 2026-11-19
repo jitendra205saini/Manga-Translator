@@ -78,12 +78,19 @@ def download_image(url, referer):
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0",
         "Accept": "image/avif,image/webp,image/*,*/*;q=0.8",
     }
+    # browser ki tarah: doosri site ko sirf site ka naam ("https://site.com/"), na chale to poora page URL
+    refs = [None]
     if referer:
-        headers["Referer"] = referer
-    r = requests.get(url, headers=headers, timeout=30)
-    if r.status_code != 200 or not r.headers.get("content-type", "").startswith("image"):
-        raise RuntimeError(f"image download fail: HTTP {r.status_code} {url}")
-    return r.content
+        from urllib.parse import urlsplit
+        p, u = urlsplit(referer), urlsplit(url)
+        origin = f"{p.scheme}://{p.netloc}/"
+        refs = [origin, referer] if (p.scheme, p.netloc) != (u.scheme, u.netloc) else [referer, origin]
+    for ref in refs:
+        h = dict(headers, **({"Referer": ref} if ref else {}))
+        r = requests.get(url, headers=h, timeout=30)
+        if r.status_code == 200 and r.headers.get("content-type", "").startswith("image"):
+            return r.content
+    raise RuntimeError(f"image download fail: HTTP {r.status_code} {url}")
 
 
 @app.get("/health")

@@ -73,6 +73,15 @@ async function canvasToB64(canvas) {
   return bufToB64(await blob.arrayBuffer());
 }
 
+// Browser doosri site ko sirf site ka naam bhejta hai ("https://site.com/"), poora page URL nahi.
+// Kai image hosts (jaise 2xstorage) poore URL par 403 dete hain, isliye wahi bhejo jo browser bhejta.
+function refFor(url, pageUrl) {
+  try {
+    const u = new URL(url), p = new URL(pageUrl);
+    return u.origin === p.origin ? pageUrl : p.origin + "/";
+  } catch (e) { return pageUrl; }
+}
+
 // Extension ki request par wahi Referer lagao jo page khud bhejta hai (image hosts hotlink check karte hain)
 let refererLock = Promise.resolve();
 async function withPageReferer(url, pageUrl, fn) {
@@ -84,7 +93,7 @@ async function withPageReferer(url, pageUrl, fn) {
         removeRuleIds: [1],
         addRules: [{
           id: 1, priority: 1,
-          action: { type: "modifyHeaders", requestHeaders: [{ header: "referer", operation: "set", value: pageUrl }] },
+          action: { type: "modifyHeaders", requestHeaders: [{ header: "referer", operation: "set", value: pageUrl }] },  // pageUrl = refFor() ka nateeja
           condition: { requestDomains: [host], tabIds: [-1], resourceTypes: ["xmlhttprequest"] },
         }],
       }).catch((e) => console.warn("[manga-tr] referer rule fail", e));
@@ -98,7 +107,11 @@ async function withPageReferer(url, pageUrl, fn) {
 
 // Tarika 1: image URL seedha download (full quality, kisi bhi format ko PNG mein badlo)
 async function fetchAsPngBase64(url, pageUrl) {
-  const r = await withPageReferer(url, pageUrl, () => fetch(url, { credentials: "include" }));
+  let r = await withPageReferer(url, refFor(url, pageUrl), () => fetch(url, { credentials: "include" }));
+  if (!r.ok && refFor(url, pageUrl) !== pageUrl) {
+    // kuch hosts ulta poora page URL maangte hain
+    r = await withPageReferer(url, pageUrl, () => fetch(url, { credentials: "include" }));
+  }
   if (!r.ok) throw new Error("HTTP " + r.status);
   const bmp = await createImageBitmap(await r.blob());
   const c = new OffscreenCanvas(bmp.width, bmp.height);
