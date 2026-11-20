@@ -369,7 +369,8 @@ def _check(r, name):
         raise RuntimeError(f"{name}: HTTP {r.status_code} {r.text[:300]}")
 
 
-GEMINI_BUDGET = 40
+GEMINI_BUDGET = 50
+_gemini_good_fast = [""]  # Fast mode mein pichhli baar chala model (normal wale se alag yaad)
 # free key ki per-minute limit: requests ek saath nahi, barabar faasle pe (429 aur chhoote pages se bachav)
 _pace_lock = threading.Lock()
 _pace_next = {}
@@ -466,7 +467,10 @@ def _gemini_one(cfg, key, nkeys, prompt, img_b64):
     models = c["model"] if isinstance(c["model"], list) else [c["model"]]
     # jo model pichhli baar chala use pehle, jo mila hi nahi (404) use chhod do
     models = [m for m in models if m not in _gemini_dead] or models
-    if _gemini_good in models:
+    if cfg.get("_fast"):
+        # tez wale (lite) pehle; inme jo pichhli baar chala wo sabse pehle
+        models = sorted(models, key=lambda m: (0 if "lite" in m else 1, m != _gemini_good_fast[0]))
+    elif _gemini_good in models:
         models = [_gemini_good] + [m for m in models if m != _gemini_good]
     last = None
     daily_hit = limited = 0  # kitne models par 429, unme se kitne din bhar wale
@@ -484,16 +488,20 @@ def _gemini_one(cfg, key, nkeys, prompt, img_b64):
                     headers={"x-goog-api-key": key, "Content-Type": "application/json"},
                     json={"contents": [{"role": "user", "parts": parts}],
                           "generationConfig": {"temperature": 0.5, "responseMimeType": "application/json"}},
-                    timeout=(10, left),
+                    timeout=(10, min(left, 22)),  # ek atka model poora budget na khaye: agle ko mauka
                 )
             except requests.Timeout:
-                raise RuntimeError(f"gemini: {model} {GEMINI_BUDGET}s mein jawab nahi")
+                r = None  # ye model atka: seedha agla model (poori request fail nahi)
+                last = f"{model}: timeout"
+                break
             if r.status_code in (500, 503):  # bheed: thoda ruko, phir agla model
                 last = f"{model}: HTTP {r.status_code}"
                 time.sleep(1)
                 continue
             break
         else:
+            continue
+        if r is None:
             continue
         if r.status_code == 404:
             last = f"{model}: model nahi mila"
@@ -511,7 +519,10 @@ def _gemini_one(cfg, key, nkeys, prompt, img_b64):
         data = r.json()
         try:
             text = "".join(p.get("text", "") for p in data["candidates"][0]["content"]["parts"])
-            globals()["_gemini_good"] = model
+            if cfg.get("_fast"):
+                _gemini_good_fast[0] = model
+            else:
+                globals()["_gemini_good"] = model
             return text
         except (KeyError, IndexError):
             last = f"{model}: khaali jawab {str(data)[:200]}"
@@ -626,8 +637,8 @@ def translate_pages(pages, lang, page_url="", fast=False, _retry=False, _waited=
     total = len(all_groups)
 
     order = list(cfg["providers"])
-    if fast and "groq" in order:  # Fast mode: Groq bahut tez hai, Gemini backup
-        order = ["groq"] + [p for p in order if p != "groq"]
+    if fast:  # Fast mode: Gemini ke Flash-Lite models pehle (~2 guna tez), bade Flash baad mein
+        cfg = dict(cfg, _fast=True)
     for name in order:
         if name not in PROVIDERS:
             continue
@@ -777,7 +788,7 @@ def _batch_worker():
         first = _jobs.get()
         batch = [first]
         cfg = load_config()
-        max_pages = max(1, int(cfg.get("batch_pages", 3)))
+        max_pages = max(1, int(cfg.get("batch_pages", 6)))
         deadline = time.time() + float(cfg.get("batch_wait", 0.6))
         while len(batch) < max_pages:
             left = deadline - time.time()

@@ -8,7 +8,7 @@
 
 Japanese · Korean · Chinese · English → हिन्दी
 
-<a href="https://github.com/jitendra205saini/Manga-Translator/releases/latest"><img alt="version" src="https://img.shields.io/badge/version-v2.9.0-blue"></a>
+<a href="https://github.com/jitendra205saini/Manga-Translator/releases/latest"><img alt="version" src="https://img.shields.io/badge/version-v2.9.1-blue"></a>
 <a href="https://www.python.org/downloads/"><img alt="python" src="https://img.shields.io/badge/python-3.13-3776AB?logo=python&logoColor=white"></a>
 <a href="https://github.com/jitendra205saini/Manga-Translator/blob/main/README.hinglish.md#kya-chahiye"><img alt="platform" src="https://img.shields.io/badge/platform-Windows%2011-0078D6?logo=windows&logoColor=white"></a>
 <a href="https://github.com/jitendra205saini/Manga-Translator/blob/main/README.hinglish.md#installation"><img alt="firefox" src="https://img.shields.io/badge/Firefox-supported-FF7139?logo=firefoxbrowser&logoColor=white"></a>
@@ -72,7 +72,7 @@ isliye Hindi mein gender sahi aata hai: ladki bole to *"मैं थक गई"
 | **Webtoon ke tukde** | Jo sites lambi patti ko kai tasveeron mein kaatti hain, wahan bubble do hisson mein bat jaata hai. Upar aur neeche ke tukde bhi jaate hain, isliye kata bubble poora padha jaata hai aur dono tasveeron par sahi chipakta hai |
 | **Agla chapter pehle se** | Chapter khatam hote hi agle chapter ke pehle 4 pages pehle se translate |
 | **Dobara translate** | Page par right-click karke **Translate this page again**, cache chhod ke naya anuvaad |
-| **Free limit bachata hai** | Ek AI request mein 3 pages tak, free per-minute limit ke andar pacing, aur disk cache, isliye dobara khole chapter muft |
+| **Free limit bachata hai** | Ek AI request mein 6 pages tak, free per-minute limit ke andar pacing, aur disk cache, isliye dobara khole chapter muft |
 | **Kai Gemini keys** | Comma laga ke ek se zyada key daalo. Jis key ki limit khatam ho wo ruk jaati hai aur agli chalti hai |
 | **Backup chain** | Gemini → Groq (vision model, image bhi dekhta hai) → backup translator (switch se) → local NLLB, isliye padhna kam hi rukta hai |
 | **Backup translator** | Popup switch: saari AI limit khatam ho to English pages IndicTrans2 web API se. Cache nahi hota, isliye baad mein AI se dobara achha banta hai |
@@ -137,7 +137,7 @@ flowchart LR
 flowchart TD
     A["Chapter khula<br/>ya page screen par aaya"] --> B["Saari images scan<br/>lazy data-src / loading=lazy<br/>patle webtoon tukde bhi"]
     B --> C["Line, upar se neeche<br/>scroll kahin bhi ho<br/>parda: कतार में…"]
-    C --> D{"Jagah khaali?<br/>max 5 pages"}
+    C --> D{"Jagah khaali?<br/>max 8 pages"}
     D -->|"haan"| E["Parda: spinner<br/>अनुवाद हो रहा है…"]
     E --> F["Theek upar / neeche ke tukde<br/>same chaudai, gap 40 px se kam<br/>~500 px tak"]
     F --> G{"URL pehle se translate?<br/>cacheOnly request"}
@@ -191,13 +191,12 @@ flowchart TD
 flowchart TD
     G["Is page ke bubbles"] --> M["Series memory jodo, memory.json<br/>character → gender + Hindi naam · pichhli 8 lines"]
     M --> P["Prompt: page image + numbered texts<br/>anime dub jaisi casual Hindi<br/>verb bolne / sunne wale ke gender se"]
-    P --> BQ["Batcher: 0.6 s ruke<br/>ek series ke 3 pages tak<br/>max 45 bubbles = 1 request"]
+    P --> BQ["Batcher: 0.6 s ruke<br/>ek series ke 6 pages tak<br/>max 45 bubbles = 1 request"]
     BQ --> PC["Free limit ke andar pacing<br/>har Gemini key 14 / min · Groq 25 / min"]
     PC --> FM{"Fast mode?"}
     FM -->|"nahi"| GM["Gemini<br/>4 keys × 5 models<br/>agla diagram dekho"]
-    FM -->|"haan"| GQ["Groq vision model"]
-    GM -->|"saari keys ruki"| GQ
-    GQ -.->|"Fast mode: fail"| GM
+    FM -->|"haan: Flash-Lite models pehle"| GM
+    GM -->|"saari keys ruki"| GQ["Groq vision model"]
     GM --> CK{"Jawab theek?<br/>har line · Urdu lipi nahi<br/>English nahi bachi"}
     GQ --> CK
     CK -->|"nahi"| RA["Sirf galat lines dobara poochho<br/>aakhri upaay: Urdu → Devanagari"]
@@ -375,7 +374,7 @@ SETUP.bat
 
 - **Always on for this site** tick karo to us site par apne aap ON.
 - **Auto** ki jagah language chun lo to pages jaldi bante hain.
-- **Fast mode** Groq pehle chalata hai: ~2 guna tez, Hindi thodi kam natural ho sakti hai.
+- **Fast mode** Gemini ke tez Flash-Lite models pehle chalata hai: ~2 guna tez, Hindi thodi saadi. Off ho to bada Gemini Flash pehle chalta hai, sabse natural Hindi ke liye.
 - **Backup translator** saari AI limit khatam hone par bhi English manga chalu rakhta hai.
 - Koi page galat bana ho to right-click karke **Translate this page again**.
 - Original se milane ke liye **Alt+O** (ya popup ka button).
@@ -399,7 +398,7 @@ SETUP.bat
 | `backup.api_key` | `""` | Backup translator ki key (setup page par bhi) |
 | `backup.url` | IndicTrans2 API | Backup translator ka address |
 | `image_max_side` | `1024` | AI ko bheji image ka size. Chhoti = kam tokens |
-| `batch_pages` | `3` | Ek AI request mein itne pages tak |
+| `batch_pages` | `6` | Ek AI request mein itne pages tak |
 | `batch_wait` | `0.6` | Request bhejne se pehle aur pages ka itne second intezaar |
 
 ## Troubleshooting
@@ -439,7 +438,7 @@ Debug ke liye server log mein har page ki language, kaunsa provider chala aur ha
 - [x] ML bubble aur text detector (`comic-text-and-bubble-detector`)
 - [x] Art ke upar text ke liye LaMa inpainting, ab manga wala model
 - [x] Art par letter-level text mask aur asli text ka rang (comic-translate se)
-- [x] Batched AI requests, 3 pages ek saath, free limit ke andar pacing
+- [x] Batched AI requests, 6 pages tak ek saath, free limit ke andar pacing
 - [x] Disk cache, URL cache aur chal rahe page ka saajha
 - [x] Comic-style Devanagari font (Baloo 2)
 - [x] Original / Hindi toggle (Alt+O)

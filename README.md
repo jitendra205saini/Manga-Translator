@@ -8,7 +8,7 @@
 
 Japanese · Korean · Chinese · English → हिन्दी
 
-<a href="https://github.com/jitendra205saini/Manga-Translator/releases/latest"><img alt="version" src="https://img.shields.io/badge/version-v2.9.0-blue"></a>
+<a href="https://github.com/jitendra205saini/Manga-Translator/releases/latest"><img alt="version" src="https://img.shields.io/badge/version-v2.9.1-blue"></a>
 <a href="https://www.python.org/downloads/"><img alt="python" src="https://img.shields.io/badge/python-3.13-3776AB?logo=python&logoColor=white"></a>
 <a href="https://github.com/jitendra205saini/Manga-Translator/blob/main/README.md#requirements"><img alt="platform" src="https://img.shields.io/badge/platform-Windows%2011-0078D6?logo=windows&logoColor=white"></a>
 <a href="https://github.com/jitendra205saini/Manga-Translator/blob/main/README.md#installation"><img alt="firefox" src="https://img.shields.io/badge/Firefox-supported-FF7139?logo=firefoxbrowser&logoColor=white"></a>
@@ -72,7 +72,7 @@ uses the correct gender: a girl says *"मैं थक गई"*, a boy says *"�
 | **Webtoon strips** | Sites that cut a long strip into many images often split a speech bubble in two. The strips above and below are sent too, so a split bubble is read whole and drawn back across both images |
 | **Next chapter ready** | When a chapter is done, the first 4 pages of the next chapter are translated in advance |
 | **Translate again** | Right-click a page and choose **Translate this page again** to skip the cache |
-| **Saves free quota** | Up to 3 pages in one AI request, requests paced under the free per-minute limits, and a disk cache so re-opened chapters cost nothing |
+| **Saves free quota** | Up to 6 pages in one AI request, requests paced under the free per-minute limits, and a disk cache so re-opened chapters cost nothing |
 | **Several Gemini keys** | Add more than one key, separated by commas; a key that hits its limit rests and the next one is used |
 | **Fallback chain** | Gemini → Groq (vision model, also sees the image) → optional backup translator → local NLLB, so reading rarely stops |
 | **Backup translator** | Popup switch: when every AI limit is used up, English pages are translated by an IndicTrans2 web API. Not cached, so the AI redoes them later |
@@ -137,7 +137,7 @@ flowchart LR
 flowchart TD
     A["Chapter opens<br/>or a page scrolls into view"] --> B["Scan all images<br/>lazy data-src / loading=lazy<br/>thin webtoon strips too"]
     B --> C["Queue, sorted top to bottom<br/>wherever you scroll<br/>overlay: कतार में…"]
-    C --> D{"Free slot?<br/>max 5 pages"}
+    C --> D{"Free slot?<br/>max 8 pages"}
     D -->|"yes"| E["Overlay: spinner<br/>अनुवाद हो रहा है…"]
     E --> F["Find strips directly above / below<br/>same width, gap under 40 px<br/>up to ~500 px"]
     F --> G{"URL already translated?<br/>cacheOnly request"}
@@ -191,13 +191,12 @@ flowchart TD
 flowchart TD
     G["Bubbles of this page"] --> M["Add series memory, memory.json<br/>character → gender + Hindi name · last 8 lines"]
     M --> P["Prompt: page image + numbered texts<br/>casual Hindi like anime dubs<br/>verbs follow speaker / listener gender"]
-    P --> BQ["Batcher: waits 0.6 s<br/>up to 3 pages of one series<br/>max 45 bubbles = 1 request"]
+    P --> BQ["Batcher: waits 0.6 s<br/>up to 6 pages of one series<br/>max 45 bubbles = 1 request"]
     BQ --> PC["Pacing under free limits<br/>14 / min per Gemini key · 25 / min Groq"]
     PC --> FM{"Fast mode?"}
     FM -->|"no"| GM["Gemini<br/>4 keys × 5 models<br/>see the next diagram"]
-    FM -->|"yes"| GQ["Groq vision model"]
-    GM -->|"every key resting"| GQ
-    GQ -.->|"Fast mode: fails"| GM
+    FM -->|"yes: Flash-Lite models first"| GM
+    GM -->|"every key resting"| GQ["Groq vision model"]
     GM --> CK{"Answer usable?<br/>every line · no Urdu script<br/>no English left"}
     GQ --> CK
     CK -->|"no"| RA["Ask again only for the bad lines<br/>last resort: Urdu → Devanagari"]
@@ -376,7 +375,7 @@ SETUP.bat
 
 - Tick **Always on for this site** to turn the translator on automatically for that site.
 - Pick a fixed language instead of **Auto** to make pages translate faster.
-- **Fast mode** uses Groq first: about twice as fast, the Hindi may be slightly less natural.
+- **Fast mode** uses Gemini's quicker Flash-Lite models first: about twice as fast, the Hindi a little simpler. Off, the larger Gemini Flash model goes first for the most natural Hindi.
 - **Backup translator** keeps English manga going when every AI limit is used up.
 - Right-click a page and choose **Translate this page again** if a page came out wrong.
 - Press **Alt+O** (or the popup button) to compare with the original page.
@@ -400,7 +399,7 @@ SETUP.bat
 | `backup.api_key` | `""` | Key for the backup translator (also on the setup page) |
 | `backup.url` | IndicTrans2 API | Backup translator address |
 | `image_max_side` | `1024` | Size of the image sent to the AI. Smaller uses fewer tokens |
-| `batch_pages` | `3` | Up to this many pages are translated in one AI request |
+| `batch_pages` | `6` | Up to this many pages are translated in one AI request |
 | `batch_wait` | `0.6` | Seconds to wait for more pages before sending a request |
 
 ## Troubleshooting
@@ -440,7 +439,7 @@ gender (`m` / `f` / `u`). The original and translated versions of the last 40 pa
 - [x] ML bubble and text detector (`comic-text-and-bubble-detector`)
 - [x] LaMa inpainting for text drawn on artwork, now the manga-tuned model
 - [x] Letter-level text mask on artwork and original text colour (from comic-translate)
-- [x] Batched AI requests, 3 pages each, paced under free limits
+- [x] Batched AI requests, up to 6 pages each, paced under free limits
 - [x] Disk cache, URL cache and in-progress sharing
 - [x] Comic-style Devanagari font (Baloo 2)
 - [x] Original / Hindi toggle (Alt+O)

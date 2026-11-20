@@ -80,7 +80,7 @@ sequenceDiagram
     P->>C: images load (or lazy URLs found)
     C->>C: queue every page, sorted top to bottom
     C->>P: overlay "कतार में…" on waiting pages
-    loop up to 5 pages at a time
+    loop up to 8 pages at a time
         C->>P: overlay "अनुवाद हो रहा है…"
         C->>B: translate {image or src, neighbour strips}
         B->>S: URL already translated? (cacheOnly)
@@ -175,10 +175,10 @@ Every bubble is owned by exactly one image (the one holding its centre), so it i
 
 ```mermaid
 flowchart TD
-    J["Page ready for AI"] --> BQ["Batcher<br/>waits 0.6 s, joins up to 3 pages<br/>of the same series, max 45 bubbles"]
+    J["Page ready for AI"] --> BQ["Batcher<br/>waits 0.6 s, joins up to 6 pages<br/>of the same series, max 45 bubbles"]
     BQ --> F{"Fast mode?"}
     F -->|no| G1
-    F -->|yes| Q1
+    F -->|"yes: Flash-Lite models first"| G1
 
     G1["Gemini<br/>4 keys × 5 models, see below"] --> GR{"OK?"}
     GR -->|yes| CHK
@@ -199,7 +199,7 @@ flowchart TD
     NL -->|no| LIM["Error with retry_after<br/>→ page waits and retries itself"]
 ```
 
-The diagram shows the normal order. With **Fast mode** on, the order flips: Groq is tried first and Gemini is its backup.
+With **Fast mode** on, Gemini's quicker Flash-Lite models are tried before the larger Flash model; Groq stays the backup.
 
 Rate pacing keeps requests under the free limits: about 14 requests per minute per Gemini key and 25 per minute for Groq. The daily Gemini count in the popup follows Google's day, which resets at midnight Pacific time (around 1:30 PM in India).
 

@@ -210,7 +210,7 @@
   setInterval(placeAll, 1000);  // lazy images load hone se layout khisakta hai
 
   // ek saath 5 pages (AI ka intezaar parallel mein)
-  const WORKERS = 5;
+  const WORKERS = 8;  // webtoon ke chhote tukde: zyada ek saath (server 6 tak ek AI request mein jodta hai)
   let active = 0;
   function pump() {
     if (limitUntil > Date.now()) {

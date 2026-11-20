@@ -225,6 +225,21 @@ def save_debug(img, out):
         print("[debug] save fail:", e)
 
 
+async def _detect_lang(img, dets):
+    """Language sirf bubbles ke andar ke text se pehchano: art ke upar ke SFX (jaise English manhwa mein
+    Korean 쿠웅) ko Japanese OCR Chinese akshar padh leta tha aur poora page Chinese maan liya jaata tha."""
+    boxes = [d["box"] for d in dets if d["label"] == "text_bubble"]
+    if not boxes:
+        return await detect_and_ocr(img)
+    W, H = img.size
+    only = Image.new("RGB", img.size, (255, 255, 255))
+    for x0, y0, x1, y1 in boxes:
+        b = (max(0, int(x0) - 6), max(0, int(y0) - 6), min(W, int(x1) + 6), min(H, int(y1) + 6))
+        only.paste(img.crop(b), b[:2])
+    lang, _ = await detect_and_ocr(only)
+    return lang, (await _ocr(img, lang) or [])  # asli lines poore page se (art ka text bhi)
+
+
 def _url_key(url, lang_choice):
     return "u" + hashlib.md5(url.encode("utf-8", "ignore")).hexdigest() + "_" + lang_choice + "_" + CACHE_VERSION
 
@@ -358,7 +373,9 @@ async def _translate_page(raw, key, lang_choice, page_url, fast, prev_raws=None,
     # pehle detector (GPU ~0.1 s): is page par koi text hi nahi to OCR / AI ka time mat lagao
     if not detector.available():
         raise RuntimeError("Bubble detector model nahi mila. Installer / SETUP.bat dobara chalao.")
-    dets = await asyncio.to_thread(detector.detect, img)
+    # GPU (DirectML) par detector, PaddleOCR, manga-ocr ek saath chale to onnxruntime crash: isliye lock mein
+    async with _ocr_lock:
+        dets = await asyncio.to_thread(detector.detect, img)
     own_text = [d for d in dets if d["label"] != "bubble"
                 and L <= (d["box"][1] + d["box"][3]) / 2 < L + own_h]
     if not own_text:
@@ -379,9 +396,9 @@ async def _translate_page(raw, key, lang_choice, page_url, fast, prev_raws=None,
             # yaad ki hui language galat lag rahi (Korean OCR par bahut Latin / kuch nahi mila): dobara pehchano
             if sum(len(l["text"]) for l in lines) < 4 or (lang != "en" and _count(LATIN, lines) > 40):
                 _series_lang.pop(skey, None)
-                lang, lines = await detect_and_ocr(img)
+                lang, lines = await _detect_lang(img, dets)
         else:
-            lang, lines = await detect_and_ocr(img)
+            lang, lines = await _detect_lang(img, dets)
         if lang_choice not in VALID_LANGS and skey not in _series_lang and sum(len(l["text"]) for l in lines) >= 20:
             votes = _series_vote.setdefault(skey, [])
             votes.append(lang)
