@@ -765,8 +765,11 @@ def _still_english(h):
     return len(re.findall(r"[A-Za-z]", h)) >= 2 and not re.search(r"[ऀ-ॿ]", h)
 
 
+_MIXED = re.compile(r"[ऀ-ॿ][A-Za-z]|[A-Za-z][ऀ-ॿ]")  # "ओppa": ek shabd mein aadha Hindi aadha English
+
+
 def _bad_script(h):
-    return bool(h) and bool(_ARABIC.search(h))
+    return bool(h) and bool(_ARABIC.search(h) or _MIXED.search(strip_marks(h)))
 
 
 def _fix_script(h):

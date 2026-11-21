@@ -17,7 +17,7 @@ REC_H = 48
 _det = None
 _rec = {}
 _dicts = {}
-_lock = threading.Lock()
+from gpu_lock import LOCK as _lock  # sab GPU models ka ek hi lock
 _cpu_only = False
 
 

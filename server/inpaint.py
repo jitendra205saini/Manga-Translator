@@ -17,7 +17,7 @@ SIZE = 512       # purana model: hamesha 512x512
 MAX_SIDE = 768   # manga model: isse bada crop chhota karke (speed)
 
 _sess = None
-_lock = threading.Lock()
+from gpu_lock import LOCK as _lock  # sab GPU models ka ek hi lock
 
 
 def available():
@@ -28,9 +28,34 @@ def _session():
     global _sess
     if _sess is None:
         import onnxruntime as ort
-        _sess = ort.InferenceSession(MODEL_PATH, providers=["CPUExecutionProvider"])
-        print(f"[inpaint] LaMa loaded (CPU, {'manga' if MANGA else 'generic'})")
+        import detector
+        # GPU par ~5 guna tez (768 crop: ~0.3 s vs 1.5 s); GPU toota ho to CPU
+        prov = ["CPUExecutionProvider"] if (_on_cpu or detector._cpu_only) else ["DmlExecutionProvider", "CPUExecutionProvider"]
+        prov = [p for p in prov if p in ort.get_available_providers()]
+        try:
+            _sess = ort.InferenceSession(MODEL_PATH, providers=prov)
+        except Exception as e:
+            print("[inpaint] GPU load fail, CPU:", e)
+            _sess = ort.InferenceSession(MODEL_PATH, providers=["CPUExecutionProvider"])
+        print(f"[inpaint] LaMa loaded ({_sess.get_providers()[0]}, {'manga' if MANGA else 'generic'})")
     return _sess
+
+
+_on_cpu = False
+
+
+def _run(feed):
+    """GPU par chalao; GPU error aaye to ek baar CPU session bana ke dobara."""
+    global _sess, _on_cpu
+    with _lock:
+        try:
+            return _session().run(None, feed)
+        except Exception as e:
+            if _on_cpu:
+                raise
+            print("[inpaint] GPU run fail, ab CPU:", e)
+            _on_cpu, _sess = True, None
+            return _session().run(None, feed)
 
 
 def inpaint_region(arr, mask, box):
@@ -54,8 +79,7 @@ def inpaint_region(arr, mask, box):
     else:
         x = np.asarray(Image.fromarray(crop).resize((SIZE, SIZE), Image.BICUBIC), dtype=np.float32) / 255.0
         mm = (cv2.resize(m, (SIZE, SIZE), interpolation=cv2.INTER_NEAREST) > 0).astype(np.float32)
-        with _lock:
-            out = _session().run(None, {"image": x.transpose(2, 0, 1)[None], "mask": mm[None, None]})[0][0]
+        out = _run({"image": x.transpose(2, 0, 1)[None], "mask": mm[None, None]})[0][0]
         out = np.clip(out.transpose(1, 2, 0), 0, 255).astype(np.uint8)
         out = np.asarray(Image.fromarray(out).resize((w, h), Image.BICUBIC))
     sel = m.astype(bool)
@@ -76,8 +100,7 @@ def _run_manga(crop, m):
     ph, pw = (8 - ih % 8) % 8, (8 - iw % 8) % 8
     x = np.pad(img, ((0, ph), (0, pw), (0, 0)), mode="reflect").astype(np.float32) / 255.0
     mm = (np.pad(mk, ((0, ph), (0, pw)), mode="reflect") > 0).astype(np.float32)
-    with _lock:
-        out = _session().run(None, {"image": x.transpose(2, 0, 1)[None], "mask": mm[None, None]})[0][0]
+    out = _run({"image": x.transpose(2, 0, 1)[None], "mask": mm[None, None]})[0][0]
     out = np.clip(out.transpose(1, 2, 0) * 255, 0, 255).astype(np.uint8)[:ih, :iw]
     if s < 1:
         out = cv2.resize(out, (w, h), interpolation=cv2.INTER_CUBIC)

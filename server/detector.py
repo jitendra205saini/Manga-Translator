@@ -11,7 +11,7 @@ LABELS = {0: "bubble", 1: "text_bubble", 2: "text_free"}
 SIZE = 640
 
 _sess = None
-_lock = threading.Lock()
+from gpu_lock import LOCK as _lock  # sab GPU models ka ek hi lock
 
 
 def available():

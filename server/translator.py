@@ -141,11 +141,96 @@ def ml_groups(img, lines, lang, dets=None):
         th = statistics.median([_thick(l["box"]) for l in mine]) if mine else             max(16, min(40, min(box[2] - box[0], box[3] - box[1]) / 3))
         groups.append({"lines": mine, "text": text, "box": box, "bbox": bbox,
                        "kind": "bubble" if bbox else "free", "vertical": False, "thickness": th})
-    # padhne ka order
+    # padhne ka order: pehle panel (manga ke khaane), phir panel ke andar upar se neeche
+    rtl = lang == "ja"
+    try:
+        panels = _panels(img, rtl)
+    except Exception as e:
+        print("[panels] fail:", e)
+        panels = []
+
+    def panel_of(g):
+        b = g["box"]
+        cx, cy = (b[0] + b[2]) / 2, (b[1] + b[3]) / 2
+        for i, (x0, y0, x1, y1) in enumerate(panels):
+            if x0 <= cx < x1 and y0 <= cy < y1:
+                return i
+        return len(panels)
+
     Hh = max((g["box"][3] for g in groups), default=1)
     band = max(1, Hh // 6)
-    groups.sort(key=lambda g: (g["box"][1] // band, -g["box"][2] if lang == "ja" else g["box"][0]))
+    groups.sort(key=lambda g: (panel_of(g), g["box"][1] // band, -g["box"][2] if rtl else g["box"][0]))
     return groups, lang
+
+
+def _panels(img, rtl=False):
+    """Page ke panels padhne ke order mein (khaali patti / gutter par kaat-kaat ke, XY-cut).
+    Sirf numpy, chhoti copy par: kuch milliseconds. Webtoon jaise ek hi lambe panel par ek hi rect milega."""
+    import numpy as np
+    W, H = img.size
+    s = min(1.0, 600 / max(W, H))
+    g = np.asarray(img.convert("L").resize((max(1, int(W * s)), max(1, int(H * s)))), dtype=np.uint8)
+    # gutter: poori line lagbhag ek hi rang (safed ya kaali)
+    light, dark = g > 225, g < 30
+    min_gap = 3
+    min_side = max(40, min(g.shape) // 8)
+
+    def gaps(m, axis):
+        # axis=1: har row ke liye; axis=0: har column ke liye
+        full = (m.mean(axis=axis) > 0.97)
+        runs, i, n = [], 0, len(full)
+        while i < n:
+            if full[i]:
+                j = i
+                while j < n and full[j]:
+                    j += 1
+                runs.append((i, j))
+                i = j
+            else:
+                i += 1
+        return [r for r in runs if r[1] - r[0] >= min_gap and r[0] > 0 and r[1] < n]
+
+    def pieces(runs, n):
+        out, start = [], 0
+        for a, b in runs:
+            if a > start:
+                out.append((start, a))
+            start = b
+        if start < n:
+            out.append((start, n))
+        # asli panel kam se kam page ka ~1/8: chhota tukda (bubble ke andar ki safed jagah) bagal wale mein jodo
+        merged = []
+        for p in out:
+            if merged and (p[1] - p[0] < min_side or merged[-1][1] - merged[-1][0] < min_side):
+                merged[-1] = (merged[-1][0], p[1])
+            else:
+                merged.append(p)
+        return merged
+
+    res = []
+
+    def cut(x0, y0, x1, y1, depth, horiz, flipped=False):
+        sub_l, sub_d = light[y0:y1, x0:x1], dark[y0:y1, x0:x1]
+        for m in (sub_l, sub_d):
+            if horiz:
+                ps = pieces(gaps(m, 1), y1 - y0)
+                if len(ps) > 1:
+                    for a, b in ps:
+                        cut(x0, y0 + a, x1, y0 + b, depth + 1, False)
+                    return
+            else:
+                ps = pieces(gaps(m, 0), x1 - x0)
+                if len(ps) > 1:
+                    for a, b in (reversed(ps) if rtl else ps):
+                        cut(x0 + a, y0, x0 + b, y1, depth + 1, True)
+                    return
+        if depth < 8 and not flipped:
+            # is disha mein kuch nahi mila: doosri disha ek baar try karo
+            return cut(x0, y0, x1, y1, depth + 1, not horiz, True)
+        res.append((x0, y0, x1, y1))
+
+    cut(0, 0, g.shape[1], g.shape[0], 0, True)
+    return [(int(x0 / s), int(y0 / s), int(x1 / s) + 1, int(y1 / s) + 1) for x0, y0, x1, y1 in res]
 
 
 def _manga_ocr(img, dets, lines, lang):

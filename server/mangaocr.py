@@ -11,7 +11,7 @@ DIR = os.path.join(HERE, "models", "manga-ocr")
 START, EOS, MAX_LEN = 2, 3, 120
 
 _enc = _dec = _vocab = None
-_lock = threading.Lock()
+from gpu_lock import LOCK as _lock  # sab GPU models ka ek hi lock
 
 
 def available():
