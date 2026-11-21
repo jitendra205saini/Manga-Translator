@@ -64,7 +64,10 @@ uses the correct gender: a girl says *"मैं थक गई"*, a boy says *"�
 | **Strong OCR per language** | Windows 11 OCR, PaddleOCR v5 for Korean and Chinese, manga-ocr for Japanese (vertical text, furigana) |
 | **ML bubble detection** | An RT-DETR model finds bubbles, text inside bubbles and text on artwork, in about 0.1 s per page on the GPU |
 | **Clean typesetting** | Erases only the text pixels; text on artwork is masked letter by letter and rebuilt with a manga-tuned LaMa model; Hindi is fitted to the bubble shape in a comic-style font, as large as fits, with lines of even length |
-| **Original text colour** | Red text stays red, white text in a dark bubble stays white |
+| **Original text colour** | Red text stays red, white text in a dark bubble stays white; when lines have different colours, each Hindi line gets its own colour |
+| **Tilted text** | Text drawn at an angle (game windows, chat boxes) is detected and the Hindi is drawn at the same angle |
+| **Chat usernames kept** | In a chat or game box with a coloured username above the message, the username stays as in the original and the Hindi goes below it in the message colour |
+| **Panel reading order** | Bubbles are read panel by panel (right to left for Japanese), so the AI gets the lines in story order |
 | **Font by style** | The AI tags each bubble's look and the Hindi uses a matching font: bold for shouting, light for whispers, handwritten for thoughts, clean for narration boxes, decorative for scary or royal text |
 | **Matches blurry text** | If the original text is blurred, the Hindi gets the same blur |
 | **Whole chapter, in order** | Translates every page from the top of the chapter to the bottom, wherever you scroll, with a loading overlay on each page that is still waiting |
@@ -250,7 +253,7 @@ flowchart TD
     E2 -->|"yes"| LM["Text mask: letters closed inside the box<br/>dark + light, Otsu<br/>manga-tuned LaMa rebuilds the background"]
     E2 -->|"no"| FT
     LM --> FT
-    H["Hindi lines from diagram 4"] --> FT["Fit Hindi to the bubble shape<br/>Baloo 2 font + raqm shaping<br/>size and line breaks to fit<br/>original text colour, e.g. red stays red"]
+    H["Hindi lines from diagram 4"] --> FT["Fit Hindi to the bubble shape<br/>Baloo 2 font + raqm shaping<br/>size and line breaks to fit<br/>original text colour, e.g. red stays red<br/>colour per line, tilted text at the same angle<br/>chat usernames kept"]
     FT --> CT["Cut out this page from the stitched strip"]
     CT --> SP{"A bubble reaches into<br/>a neighbour strip?"}
     SP -->|"yes"| PT["Make patches: up for the strip above,<br/>down for the strip below"]
@@ -428,7 +431,8 @@ gender (`m` / `f` / `u`). The original and translated versions of the last 40 pa
 ## Known limitations
 
 - Windows OCR struggles with very stylized, italic or vertical text in English. Gemini reads those bubbles from the image instead.
-- LaMa inpainting runs on the CPU (about 0.3 to 1.5 s per text block on artwork), because it does not run on DirectML. It runs while the AI request is in flight, so it adds little extra time.
+- LaMa inpainting runs on the GPU through DirectML (about 0.3 s per text block on artwork) and falls back to the CPU (about 1.5 s) if the GPU fails. It runs while the AI request is in flight, so it adds little extra time.
+- Tilted text and chat usernames are detected only for clear, simple layouts; heavily styled text is drawn straight.
 - Very small bubbles get small Hindi text, because Hindi is usually longer than the English it replaces.
 - Gemini's free tier has a daily request limit per Google project. It resets at midnight Pacific time (about 1:30 PM in India).
 - The backup translator works only for English, gives formal Hindi and does not follow gender.
@@ -457,6 +461,8 @@ gender (`m` / `f` / `u`). The original and translated versions of the last 40 pa
 - [x] Signed Firefox add-on (permanent install, `installer/signed/manga-translator.xpi`)
 - [x] Consistent character names across a series
 - [x] Better text size and balanced line breaks in small bubbles
+- [x] Panel-by-panel reading order, LaMa on the GPU
+- [x] Tilted text, colour per line and chat usernames kept
 
 ## License
 

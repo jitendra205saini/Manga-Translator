@@ -64,7 +64,10 @@ isliye Hindi mein gender sahi aata hai: ladki bole to *"मैं थक गई"
 | **Har language ka achha OCR** | Windows 11 OCR, Korean aur Chinese ke liye PaddleOCR v5, Japanese ke liye manga-ocr (khada text, furigana) |
 | **ML bubble detection** | RT-DETR model bubbles, bubble ke andar ka text aur art ke upar ka text pehchanta hai, GPU par ~0.1 s per page |
 | **Saaf typesetting** | Sirf text ke pixel mitata hai; art ke upar ka text letter-letter mask hokar manga par tuned LaMa model se wapas banta hai; Hindi comic font mein bubble ki shape mein, jitni badi fit ho, barabar lambi lines mein |
-| **Asli text ka rang** | Laal text laal hi rehta hai, gehre bubble ka safed text safed |
+| **Asli text ka rang** | Laal text laal hi rehta hai, gehre bubble ka safed text safed; lines ke rang alag hon to har Hindi line ko apna rang |
+| **Tircha text** | Tircha likha text (game window, chat box) pakda jaata hai aur Hindi usi angle par likhi jaati hai |
+| **Chat ka username wahi** | Chat ya game box mein message ke upar rangeen username ho to wo original jaisa rehta hai, Hindi uske neeche message ke rang mein |
+| **Panel ke kram mein padhna** | Bubble panel-panel padhe jaate hain (Japanese mein daayen se baayen), taaki AI ko lines kahani ke kram mein milen |
 | **Style ke hisaab se font** | AI har bubble ka style batata hai aur Hindi usi jaise font mein: chillane par mota, dheere bolne par patla, sochne par haath ki likhawat, narration box mein saaf, darawne ya shaahi text ke liye sajawati |
 | **Dhundhla text bhi waisa hi** | Original text dhundhla ho to Hindi bhi utni hi dhundhli |
 | **Poora chapter, kram se** | Chapter ka har page upar se neeche tak translate, aap kahin bhi scroll karo. Jo page baaki hai us par loading parda |
@@ -250,7 +253,7 @@ flowchart TD
     E2 -->|"haan"| LM["Text mask: box ke andar band letters<br/>kaale + safed, Otsu<br/>manga LaMa background wapas banaye"]
     E2 -->|"nahi"| FT
     LM --> FT
-    H["Diagram 4 ki Hindi lines"] --> FT["Hindi bubble ki shape mein fit<br/>Baloo 2 font + raqm shaping<br/>size aur line todna fit ke hisaab se<br/>original text ka rang, jaise laal to laal"]
+    H["Diagram 4 ki Hindi lines"] --> FT["Hindi bubble ki shape mein fit<br/>Baloo 2 font + raqm shaping<br/>size aur line todna fit ke hisaab se<br/>original text ka rang, jaise laal to laal<br/>har line ka rang, tircha text usi angle par<br/>chat username wahi"]
     FT --> CT["Jode hue strip se ye page kaato"]
     CT --> SP{"Koi bubble padosi<br/>tukde tak jaata?"}
     SP -->|"haan"| PT["Patch banao: upar wale tukde ke liye,<br/>neeche wale ke liye"]
@@ -427,7 +430,8 @@ Debug ke liye server log mein har page ki language, kaunsa provider chala aur ha
 ## Kamiyan (Known limitations)
 
 - Windows OCR bahut stylish, tircha ya khada English text theek se nahi padhta. Gemini aise bubbles image se padh leta hai.
-- LaMa inpainting CPU par chalta hai (art ke upar har text block ke liye ~0.3 se 1.5 s), kyunki ye DirectML par nahi chalta. Ye AI ke jawab ke intezaar ke saath chalta hai, isliye extra time kam lagta hai.
+- LaMa inpainting GPU par DirectML se chalta hai (art ke upar har text block ~0.3 s), GPU fail ho to CPU par (~1.5 s). Ye AI ke jawab ke intezaar ke saath chalta hai, isliye extra time kam lagta hai.
+- Tircha text aur chat username sirf saaf, simple layout mein pakde jaate hain; bahut styled text seedha likha jaata hai.
 - Bahut chhote bubbles mein Hindi chhoti aati hai, kyunki Hindi aksar English se lambi hoti hai.
 - Gemini free tier ki roz ki limit har Google project par hai. Ye Pacific time ki raat 12 baje (India mein ~1:30 PM) reset hoti hai.
 - Backup translator sirf English ke liye hai, formal Hindi deta hai aur gender ka dhyan nahi rakhta.
@@ -456,6 +460,8 @@ Debug ke liye server log mein har page ki language, kaunsa provider chala aur ha
 - [x] Signed Firefox add-on (hamesha ke liye install, `installer/signed/manga-translator.xpi`)
 - [x] Poori series mein characters ke naam ek jaise
 - [x] Chhote bubbles mein behtar text size aur barabar line todna
+- [x] Panel-panel padhne ka kram, LaMa GPU par
+- [x] Tircha text, har line ka rang aur chat username wahi
 
 ## License
 
