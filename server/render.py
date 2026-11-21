@@ -110,6 +110,14 @@ def balanced_wrap(draw, text, font, max_w):
     return wrap_text(draw, text, font, hi)
 
 
+def _line_fg(fg, i, n):
+    """fg ek rang, ya [(upar se kitna neeche 0..1, rang), ...] (har line ka apna rang): line i ka rang."""
+    if not isinstance(fg, list):
+        return fg
+    f = (i + 0.5) / max(1, n)
+    return min(fg, key=lambda r: abs(r[0] - f))[1]
+
+
 def draw_in_box(draw, text, box, fg, bg, thickness):
     x0, y0, x1, y1 = box
     bw, bh = max(1, x1 - x0), max(1, y1 - y0)
@@ -132,8 +140,8 @@ def draw_in_box(draw, text, box, fg, bg, thickness):
     cx = (x0 + x1) / 2
     y = (y0 + y1) / 2 - len(lines) * lh / 2
     stroke = max(1, size // 8)  # bg color ki outline: box se bahar jaye to bhi padhne mein aaye
-    for line in lines:
-        draw.text((cx, y + lh / 2), line, font=font, fill=fg, anchor="mm",
+    for i, line in enumerate(lines):
+        draw.text((cx, y + lh / 2), line, font=font, fill=_line_fg(fg, i, len(lines)), anchor="mm",
                   stroke_width=stroke, stroke_fill=bg)
         y += lh
 
@@ -263,8 +271,9 @@ def draw_in_mask(draw, text, mask, ox, oy, fg, bg, thickness, tbox=None):
 def _draw_lines(draw, lines, font, lh, cx, cy, fg, bg, size):
     y = cy - len(lines) * lh / 2
     stroke = max(1, size // 10)
-    for line in lines:
-        draw.text((cx, y + lh / 2), line, font=font, fill=fg, anchor="mm", stroke_width=stroke, stroke_fill=bg)
+    for i, line in enumerate(lines):
+        draw.text((cx, y + lh / 2), line, font=font, fill=_line_fg(fg, i, len(lines)), anchor="mm",
+                  stroke_width=stroke, stroke_fill=bg)
         y += lh
 
 
@@ -320,7 +329,24 @@ def _erase(arr, ebox, m, bg, around=None):
     inside = _interior(arr, ebox, around)
     if inside is not None:
         m = m & inside
+    m = _drop_edge_blobs(m)
     arr[ebox[1]:ebox[3], ebox[0]:ebox[2]][m.astype(bool)] = bg
+
+
+def _drop_edge_blobs(m):
+    """Dabbe ke kinare ko chhoota bada tukda text nahi (tirche panel ke bahar page ka kona): use mat mitao.
+    Asli text kinare tak nahi aata (dabba text se 6 px bada)."""
+    m = m.astype(np.uint8)
+    h, w = m.shape
+    n, lab, st, _ = cv2.connectedComponentsWithStats(m, connectivity=8)
+    drop = [i for i in range(1, n)
+            if st[i, cv2.CC_STAT_AREA] > 0.04 * h * w
+            and (st[i, cv2.CC_STAT_LEFT] == 0 or st[i, cv2.CC_STAT_TOP] == 0
+                 or st[i, cv2.CC_STAT_LEFT] + st[i, cv2.CC_STAT_WIDTH] >= w
+                 or st[i, cv2.CC_STAT_TOP] + st[i, cv2.CC_STAT_HEIGHT] >= h)]
+    if drop:
+        m = m & ~np.isin(lab, drop)
+    return m
 
 
 def erase_ml(img, groups):
@@ -453,6 +479,153 @@ def text_color(crop):
     return (r, g, b)
 
 
+def _text_pixels(crop):
+    """Kinaron se background, Otsu se text pixels (text_color jaisa). (bool mask, bg rang) ya None."""
+    h, w = crop.shape[:2]
+    bw = max(2, min(h, w) // 8)
+    if h <= 2 * bw or w <= 2 * bw:
+        return None
+    ring = np.concatenate([crop[:bw].reshape(-1, 3), crop[-bw:].reshape(-1, 3),
+                           crop[:, :bw].reshape(-1, 3), crop[:, -bw:].reshape(-1, 3)]).astype(np.float32)
+    bg = np.median(ring, axis=0)
+    dist = np.sqrt(((crop.astype(np.float32) - bg) ** 2).sum(2))
+    d8 = np.clip(dist, 0, 255).astype(np.uint8)
+    t, _ = cv2.threshold(d8, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    sel = dist > max(float(t), 25.0)
+    return (sel, bg) if sel.sum() >= 30 else None
+
+
+def _rot(a, deg, interp=cv2.INTER_NEAREST):
+    """a ko uske beech ke chaaron or deg degree (counter-clockwise) ghumao, size wahi."""
+    h, w = a.shape[:2]
+    M = cv2.getRotationMatrix2D((w / 2, h / 2), deg, 1.0)
+    return cv2.warpAffine(a, M, (w, h), flags=interp, borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+
+
+def text_layout(orig, box, within=None):
+    """Original text ka jhukaav aur har line ka rang (tircha chat box, rangeen naam + safed message).
+    Lautata hai (angle, rows): angle = kitne degree counter-clockwise ghumaane par lines seedhi hoti hain
+    (0 = seedha); rows = [(0..1 upar se, rang), ...] sirf jab lines ke rang sach mein alag hon, warna None."""
+    x0, y0, x1, y1 = box
+    crop = orig[y0:y1, x0:x1]
+    if crop.size == 0 or min(crop.shape[:2]) < 14:
+        return 0, None
+    tp = _text_pixels(crop)
+    if tp is None:
+        return 0, None
+    sel, bg = tp
+    if within is not None and within.shape == sel.shape and within.any():
+        sel = sel & within  # bubble ke bahar (page ka safed kona) text nahi
+        if sel.sum() < 30:
+            return 0, None
+    h, w = sel.shape
+    # akshar se bade tukde (panel ke bahar page ka safed kona, frame) text nahi
+    n, lab, st, _ = cv2.connectedComponentsWithStats(sel.astype(np.uint8), connectivity=8)
+    big = [i for i in range(1, n) if st[i, cv2.CC_STAT_HEIGHT] > 0.45 * h or st[i, cv2.CC_STAT_WIDTH] > 0.45 * w]
+    if big:
+        sel = sel & ~np.isin(lab, big)
+        if sel.sum() < 30:
+            return 0, None
+    angle = 0
+    if h <= 2.5 * w:  # khada (vertical) text nahi
+        # chhoti copy, diagonal tak pad (ghumaane par kone na katen); har angle par rows ka profile kitna "nukeela"
+        s = min(1.0, 140 / max(h, w))
+        b = cv2.resize(sel.astype(np.uint8) * 255, (max(4, int(w * s)), max(4, int(h * s))), interpolation=cv2.INTER_AREA)
+        d = int(np.hypot(*b.shape)) + 2
+        py, px = (d - b.shape[0]) // 2, (d - b.shape[1]) // 2
+        b = np.pad(b, ((py, d - b.shape[0] - py), (px, d - b.shape[1] - px))).astype(np.float32)
+
+        def score(a):
+            p = _rot(b, a, cv2.INTER_LINEAR).sum(1)
+            return float((p * p).sum())
+
+        base = score(0)
+        best = max(range(-30, 31, 3), key=score)
+        best = max(range(best - 2, best + 3), key=score)
+        # sach mein tircha (>= 3 degree) aur seedhe se saaf behtar: warna seedha hi (galti se ghumana bura dikhta)
+        if abs(best) >= 3 and score(best) > base * 1.15:
+            angle = best
+    # lines (seedha karke) aur unka rang
+    if angle:
+        selr = _rot(sel.astype(np.uint8), angle) > 0
+        cr = _rot(crop, angle, cv2.INTER_LINEAR)
+    else:
+        selr, cr = sel, crop
+    prof = selr.sum(1)
+    on = prof > max(1, 0.12 * prof.max())
+    rows, i = [], 0
+    while i < len(on):
+        if on[i]:
+            j = i
+            while j < len(on) and on[j]:
+                j += 1
+            if j - i >= 3:
+                rows.append((i, j))
+            i = j
+        else:
+            i += 1
+    if len(rows) < 2:
+        return angle, None
+    top, bot = rows[0][0], rows[-1][1]
+    out, info = [], []
+    for a, b2 in rows:
+        px_ = cr[a:b2][selr[a:b2]].astype(np.float32)
+        if len(px_) < 10:
+            continue
+        c = np.median(px_, axis=0)
+        r, g, b3 = (int(round(v)) for v in c)
+        if max(r, g, b3) - min(r, g, b3) < 40:  # sleti: kaala ya safed
+            r = g = b3 = 0 if luminance((r, g, b3)) < 128 else 255
+        xs = np.nonzero(selr[a:b2].any(0))[0]
+        out.append((((a + b2) / 2 - top) / max(1, bot - top), (r, g, b3)))
+        info.append((a, b2, int(xs.max() - xs.min()) if len(xs) else 0))
+    cols = [c for _, c in out]
+
+    def cd(c1, c2):
+        return sum((p - q) ** 2 for p, q in zip(c1, c2)) ** 0.5
+
+    spread = max((cd(c1, c2) for c1 in cols for c2 in cols), default=0)
+    if spread <= 70:
+        return angle, None
+    # chat / game ka "naam + message": ek chhoti alag rang ki line (naam), uske neeche sab ek rang (message).
+    # Upar ki lines (tirche text mein seedha box padosi ka kona pakad leta hai) padosi ki hain: unhe bhi chhodo
+    for k in range(0, max(1, len(cols) // 2 + 1)):
+        if k + 1 >= len(cols):
+            break
+        rest = cols[k + 1:]
+        if (all(cd(cols[k], c) > 70 for c in rest) and all(cd(rest[0], c) <= 40 for c in rest)
+                and info[k][2] < 0.6 * max(i[2] for i in info[k + 1:])):
+            a, b2, _ = info[k]
+            return angle, {"name": (0, b2 + max(2, (b2 - a) // 3), crop.shape[1], crop.shape[0]),
+                           "fg": rest[0], "frac": (info[k + 1][0] - top) / max(1, bot - top)}
+    return angle, out
+
+
+def _name_poly(box, angle, band):
+    """Naam wali patti (seedhe kiye crop mein y a..b) ko asli page ke coordinates ka polygon banao."""
+    a, b, w, h = band
+    x0, y0 = box[0], box[1]
+    M = cv2.getRotationMatrix2D((w / 2, h / 2), angle, 1.0)
+    Mi = cv2.invertAffineTransform(M)
+    pts = np.array([[-w, a], [2 * w, a], [2 * w, b], [-w, b]], np.float32)
+    pts = cv2.transform(pts[None], Mi)[0]
+    return (pts + [x0, y0]).astype(np.int32)
+
+
+def _derotate_box(box, deg):
+    """Tirche text ka seedha (ghumaane se pehle ka) box: bahar wale seedhe box se andar ka asli size."""
+    x0, y0, x1, y1 = box
+    W, H = x1 - x0, y1 - y0
+    t = np.radians(abs(deg))
+    c, s = np.cos(t), np.sin(t)
+    den = c * c - s * s
+    w = (W * c - H * s) / den if den > 0.2 else W * 0.8
+    h = (H * c - W * s) / den if den > 0.2 else H * 0.8
+    w, h = max(w, W * 0.5), max(h, H * 0.3)
+    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+    return (int(cx - w / 2), int(cy - h / 2), int(cx + w / 2), int(cy + h / 2))
+
+
 def _pick_fg(orig, ebox, bg):
     """Text ka rang: original se, agar background se saaf alag dikhe; warna kaala / safed."""
     x0, y0, x1, y1 = ebox
@@ -471,10 +644,38 @@ def render_ml(img, groups, texts, pre=None):
             x0, y0, x1, y1 = ebox
             arr[y0:y1, x0:x1] = orig[y0:y1, x0:x1]
 
+    # tircha text aur line-wise rang (rangeen naam + safed message): pehle sabka naap
+    layouts, tboxes = [], []
+    H, W = orig.shape[:2]
+    for (kind, ebox, mask, ox, oy, *_), text, g in zip(plans, texts, groups):
+        st, t = split_style(text or "")
+        lay = (0, None)
+        tb = tuple(int(v) for v in (g.get("box") or ebox))
+        tb = (max(0, tb[0]), max(0, tb[1]), min(W, tb[2]), min(H, tb[3]))
+        if tb[2] - tb[0] < 8 or tb[3] - tb[1] < 8:
+            tb = ebox
+        if t.replace("\x01", "").strip() and not is_sfx(t):
+            try:
+                lay = text_layout(orig, tb)
+            except Exception as e:
+                print("[render] layout fail:", e)
+        layouts.append(lay)
+        tboxes.append(tb)
+    # chat ka naam (username) jaisa tha waisa rakho: original pixels wapas, Hindi uske neeche
+    for (kind, ebox, *_), (angle, rows), tb in zip(plans, layouts, tboxes):
+        if isinstance(rows, dict):
+            pm = np.zeros(arr.shape[:2], np.uint8)
+            cv2.fillPoly(pm, [_name_poly(tb, angle, rows["name"])], 1)
+            x0, y0, x1, y1 = ebox
+            keep = np.zeros_like(pm)
+            keep[y0:y1, x0:x1] = 1
+            sel = (pm & keep).astype(bool)
+            arr[sel] = orig[sel]
+
     from PIL import Image
     out = Image.fromarray(arr)
     draw = ImageDraw.Draw(out)
-    for (kind, ebox, mask, ox, oy, bg, thick), text in zip(plans, texts):
+    for (kind, ebox, mask, ox, oy, bg, thick), text, (angle, rows), tb in zip(plans, texts, layouts, tboxes):
         style, text = split_style(text or "")
         sfx = is_sfx(text)
         text = text.replace("\x01", "").strip()
@@ -482,24 +683,59 @@ def render_ml(img, groups, texts, pre=None):
             continue
         fg = _pick_fg(orig, ebox, bg)
         sigma = text_blur(orig, ebox)
-        # dhundhla original: Hindi alag layer par likho, utna hi dhundhla karke chipkao
-        layer = Image.new("RGBA", out.size, (0, 0, 0, 0)) if sigma else None
+        fgc = fg
+        name = rows if isinstance(rows, dict) else None
+        if name:
+            c = name["fg"]
+            fgc = c if abs(luminance(c) - luminance(bg)) >= 60 else fg
+            # naam ki patti mein Hindi nahi: mask se wo hissa hatao / box upar se chhota
+            if kind == "mask":
+                pm = np.zeros(mask.shape, np.uint8)
+                poly = _name_poly(tb, angle, name["name"]) - [ox, oy]
+                cv2.fillPoly(pm, [poly.astype(np.int32)], 1)
+                m2 = mask & (1 - pm)
+                if m2.sum() > 0.3 * mask.sum():
+                    mask = m2
+        elif rows:
+            fgc = [(f, c if abs(luminance(c) - luminance(bg)) >= 60 else fg) for f, c in rows]
+        # dhundhla ya tircha original: Hindi alag layer par likho, phir dhundhla / ghuma ke chipkao
+        layer = Image.new("RGBA", out.size, (0, 0, 0, 0)) if (sigma or angle) else None
         d = ImageDraw.Draw(layer) if layer is not None else draw
+        center = None
         _style[0] = style
         try:
             if kind == "mask":
-                draw_in_mask(d, text, mask, ox, oy, fg, bg, thick)
+                m = mask
+                if angle:
+                    mh, mw = mask.shape
+                    m = _rot(mask, angle)
+                    if m.sum() < 0.5 * mask.sum():
+                        m = mask
+                    center = (ox + mw / 2, oy + mh / 2)
+                draw_in_mask(d, text, m, ox, oy, fgc, bg, thick)
             else:
                 if sfx:
                     draw_sfx(d, text, ebox)
                 else:
                     sbg = (255, 255, 255) if luminance(fg) < 128 else (0, 0, 0)
-                    draw_in_box(d, text, ebox, fg, sbg, thick)
+                    b = ebox
+                    if angle:
+                        b = _derotate_box(ebox, angle)
+                        center = ((ebox[0] + ebox[2]) / 2, (ebox[1] + ebox[3]) / 2)
+                    if name:  # naam ke neeche wala hissa
+                        bx0, by0, bx1, by1 = b
+                        b = (bx0, int(by0 + (by1 - by0) * min(0.6, name["frac"])), bx1, by1)
+                    draw_in_box(d, text, b, fgc, sbg, thick)
         finally:
             _style[0] = "normal"
         if layer is not None:
             from PIL import ImageFilter
-            out.paste(Image.alpha_composite(out.convert("RGBA"), layer.filter(ImageFilter.GaussianBlur(sigma))).convert("RGB"))
+            if center is not None:
+                # seedha likha, ab original jitna (clockwise) ghumao
+                layer = layer.rotate(-angle, resample=Image.BICUBIC, center=center)
+            if sigma:
+                layer = layer.filter(ImageFilter.GaussianBlur(sigma))
+            out.paste(Image.alpha_composite(out.convert("RGBA"), layer).convert("RGB"))
             draw = ImageDraw.Draw(out)
     return out
 
