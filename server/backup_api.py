@@ -25,7 +25,9 @@ def clean(text):
     words = re.findall(r"[A-Za-z']+", t)
     real = [w for w in words if len(w.strip("'")) >= 2 and re.search(r"[aeiouyAEIOUY]", w)]
     letters = sum(len(w) for w in real)
-    if letters < 3 or len(real) < 0.6 * max(1, len(words)):
+    toks = [w for w in t.split() if re.search(r"\w", w)]
+    junk = [w for w in toks if re.search(r"\d", w) and re.search(r"[A-Za-z]", w)]  # "60n6" jaisa
+    if letters < 3 or junk or len(real) < 0.75 * max(1, len(toks), len(words)):
         return ""
     # shuru mein akela atka akshar ("W what") hata do
     t = re.sub(r"^([A-Za-z])\s+(?=\1)", "", t, flags=re.I)

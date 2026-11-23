@@ -381,7 +381,7 @@ def _check(r, name):
         raise RuntimeError(f"{name}: HTTP {r.status_code} {r.text[:300]}")
 
 
-GEMINI_BUDGET = 50
+GEMINI_BUDGET = 70
 _gemini_good_fast = [""]  # Fast mode mein pichhli baar chala model (normal wale se alag yaad)
 # free key ki per-minute limit: requests ek saath nahi, barabar faasle pe (429 aur chhoote pages se bachav)
 _pace_lock = threading.Lock()
@@ -396,6 +396,7 @@ def _pace(name, rpm):
     if at > now:
         time.sleep(at - now)
 _gemini_dead = set()
+_gemini_busy = {}  # model -> kab tak peeche rakhna (503 / timeout)
 _gemini_good = None
 
 
@@ -484,7 +485,11 @@ def _gemini_one(cfg, key, nkeys, prompt, img_b64):
         models = sorted(models, key=lambda m: (0 if "lite" in m else 1, m != _gemini_good_fast[0]))
     elif _gemini_good in models:
         models = [_gemini_good] + [m for m in models if m != _gemini_good]
+    # abhi bheed (503) / atka hua model peeche: pehle wo jo chal rahe hain
+    now = time.time()
+    models = sorted(models, key=lambda m: _gemini_busy.get(m, 0) > now)
     last = None
+    tried = []
     daily_hit = limited = 0  # kitne models par 429, unme se kitne din bhar wale
     # Gemini dheema ho to poora page na atke: kul 40s, phir Groq (extension 90s mein haar maanta hai)
     deadline = time.time() + GEMINI_BUDGET
@@ -500,20 +505,22 @@ def _gemini_one(cfg, key, nkeys, prompt, img_b64):
                     headers={"x-goog-api-key": key, "Content-Type": "application/json"},
                     json={"contents": [{"role": "user", "parts": parts}],
                           "generationConfig": {"temperature": 0.5, "responseMimeType": "application/json"}},
-                    timeout=(10, min(left, 22)),  # ek atka model poora budget na khaye: agle ko mauka
+                    timeout=(10, min(left, 40)),  # ek atka model poora budget na khaye: agle ko mauka
                 )
             except requests.Timeout:
                 r = None  # ye model atka: seedha agla model (poori request fail nahi)
                 last = f"{model}: timeout"
+                _gemini_busy[model] = time.time() + 120
                 break
-            if r.status_code in (500, 503):  # bheed: thoda ruko, phir agla model
+            if r.status_code in (500, 503):  # bheed: dobara mat poochho, 2 min peeche, seedha agla model
                 last = f"{model}: HTTP {r.status_code}"
-                time.sleep(1)
-                continue
+                _gemini_busy[model] = time.time() + 120
+                r = None
             break
         else:
             continue
         if r is None:
+            tried.append(last)
             continue
         if r.status_code == 404:
             last = f"{model}: model nahi mila"
@@ -521,6 +528,7 @@ def _gemini_one(cfg, key, nkeys, prompt, img_b64):
             continue
         if r.status_code == 429:
             last = f"{model}: limit"
+            tried.append(last)
             limited += 1
             if re.search(r"per ?day|PerDay|daily", r.text, re.I):
                 daily_hit += 1
@@ -538,6 +546,7 @@ def _gemini_one(cfg, key, nkeys, prompt, img_b64):
             return text
         except (KeyError, IndexError):
             last = f"{model}: khaali jawab {str(data)[:200]}"
+    print(f"[gemini] models: {' | '.join(tried)}")
     if last and last.endswith("limit"):
         e = RateLimited("gemini: sab models ki limit khatam")
         e.daily = limited > 0 and daily_hit == limited  # sirf tab, jab har model ki din ki limit khatam
