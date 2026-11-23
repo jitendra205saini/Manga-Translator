@@ -547,7 +547,8 @@ def _gemini_one(cfg, key, nkeys, prompt, img_b64):
         except (KeyError, IndexError):
             last = f"{model}: khaali jawab {str(data)[:200]}"
     print(f"[gemini] models: {' | '.join(tried)}")
-    if last and last.endswith("limit"):
+    # key tabhi "limit khatam" jab har model ne limit boli; kuch busy (503) / atke the to key theek hai
+    if tried and all(t and t.endswith("limit") for t in tried):
         e = RateLimited("gemini: sab models ki limit khatam")
         e.daily = limited > 0 and daily_hit == limited  # sirf tab, jab har model ki din ki limit khatam
         raise e
