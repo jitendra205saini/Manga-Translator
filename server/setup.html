@@ -35,7 +35,7 @@
 
   <h2>Gemini API keys</h2>
   <div class="hint">Free key: <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a> (sign in, click "Create API key", copy it).<br>
-    <b>More pages per day:</b> add up to 4 keys. Make each key in a <b>different Google project or account</b>; keys from one project share one limit.
+    <b>More pages per day:</b> add up to 6 keys. Make each key in a <b>different Google project or account</b>; keys from one project share one limit.
     Key 1 is used first; when a key hits its limit it rests (1 minute, or until Google resets the day) and the next key is used automatically.</div>
   <div id="slots"></div>
   <div class="sum" id="sum"></div>
@@ -54,7 +54,7 @@
   <div id="msg"></div>
 </main>
 <script>
-const SLOTS = 4;
+const SLOTS = 6;
 const $ = (id) => document.getElementById(id);
 let keys = [], tested = {};
 

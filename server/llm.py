@@ -323,7 +323,19 @@ def usage_today():
     cfg = load_config()
     out = dict(_usage)
     out["reset_in"] = reset_in()
-    out["gemini_limit"] = int(cfg["gemini"].get("daily_limit", 500)) * max(1, len(gemini_keys(cfg)))
+    per = int(cfg["gemini"].get("daily_limit", 500))
+    keys = gemini_keys(cfg)
+    out["gemini_limit"] = per * max(1, len(keys))
+    # bachi requests har key ki apni: nayi key ki poori, aaj khatam hui key ki 0 (kul ginti se nahi)
+    now = time.time()
+    left = 0
+    for k in keys:
+        if _gkey_state.get(k) in ("day", "bad") and _gkey_rest.get(k, 0) > now:
+            continue
+        left += max(0, per - out.get("gk_" + key_id(k), 0))
+    out["gemini_left"] = left
+    # purana popup "limit - used" dikhata hai: limit aisi bhejo ki wahi sahi bachi ginti aaye
+    out["gemini_limit"] = out.get("gemini", 0) + left
     return out
 
 
