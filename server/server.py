@@ -71,6 +71,8 @@ class TranslateRequest(BaseModel):
     prev_images: list[str] = []  # upar wale tukde, paas wala pehle (webtoon ke kate bubble poore dikhane ke liye)
     next_images: list[str] = []  # neeche wale tukde
     backup: bool = False  # AI limit khatam ho to backup translator (popup switch)
+    gemini: bool | None = None  # popup switch: Gemini chalaye (None = purana extension, jaisa hai waisa)
+    local: bool | None = None   # popup switch: PC par local AI (Ollama)
 
 
 def download_image(url, referer):
@@ -94,7 +96,11 @@ def download_image(url, referer):
 
 
 @app.get("/health")
-async def health():
+async def health(gemini: int = None, local: int = None):
+    if gemini is not None:  # popup ke switch: status turant sahi dikhe
+        llm.PREFS["gemini"] = bool(gemini)
+    if local is not None:
+        llm.PREFS["local"] = bool(local)
     gpu_lost = detector._cpu_only or mangaocr._cpu_only  # GPU toota, CPU par chal raha: tray restart karega
     try:
         with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "version.txt"), encoding="utf-8") as f:
@@ -198,6 +204,10 @@ async def translate(req: TranslateRequest):
             raw = await asyncio.to_thread(download_image, req.src, req.page_url)
         else:
             return {"error": "image ya src nahi mila"}
+        if req.gemini is not None:
+            llm.PREFS["gemini"] = req.gemini
+        if req.local is not None:
+            llm.PREFS["local"] = req.local
         nb = lambda xs: [base64.b64decode(x.split(",", 1)[-1]) for x in xs] or None
         return await translator.translate_page(raw, req.lang, req.page_url, req.fast, req.url, req.fresh,
                                                nb(req.prev_images), nb(req.next_images), req.backup)

@@ -20,8 +20,12 @@ DEFAULT_CONFIG = {
     "gemini": {"api_key": "", "model": ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.1-flash-lite", "gemini-flash-latest"]},  # har model ki din ki limit alag: ek khatam to agla
     "groq": {"api_key": "", "model": ["qwen/qwen3.8-27b", "openai/gpt-oss-120b"],
              "vision_models": ["qwen/qwen3.8-27b"]},
+    "local": {"url": "http://127.0.0.1:11434", "model": "gemma3:4b"},  # Ollama: PC par, bina limit
     "image_max_side": 1024,
 }
+
+# popup ke switch (har request ke saath aate hain): Gemini chalaye ya nahi, local AI chalaye ya nahi
+PREFS = {"gemini": True, "local": True}  # local: Gemini busy / limit par PC wala model (Ollama na ho to chhod deta)
 
 LANG_NAMES = {"ja": "Japanese", "ko": "Korean", "zh_hans": "Chinese",
               "zh_hant": "Chinese", "en": "English"}
@@ -634,7 +638,85 @@ def call_groq(cfg, prompt, img_b64, prompt_txt=None):
     raise RuntimeError(f"groq: {last}")
 
 
-PROVIDERS = {"gemini": call_gemini, "groq": call_groq}
+def build_local_prompt(pages, memory):
+    """Chhote local model ke liye chhota, seedha prompt (Gemini wala lamba prompt use bhatkata hai)."""
+    lines, i = [], 0
+    for _, gs in pages:
+        for g in gs:
+            i += 1
+            lines.append({"id": i, "en": " ".join(str(g["text"] or "").split())})
+    names = memory.get("names", {})
+    known = ", ".join(f"{n} = {h}" for n, h in names.items()) or "none"
+    chars = ", ".join(f"{n} ({'female' if v == 'f' else 'male'})" for n, v in memory.get("characters", {}).items()) or "none"
+    return f"""Translate each English comic line into casual spoken Hindi (Devanagari), like a Hindi cartoon dub.
+Rules:
+- Write ONLY in Hindi Devanagari script (no Roman/English letters for Hindi words, no Bengali or other scripts).
+- Translate ONLY the given line, keep its full meaning. Never invent or repeat other lines, never add names that are not in the line.
+- The English comes from OCR and may have typos (1 = I, Rt's = It's, Pon't = Don't): fix them silently.
+- Use tu/tum and everyday words, not formal Hindi. Keep names as names.
+- Verb gender: use the speaker's gender if you can tell (names, he/she), else male.
+- If a line is only a sound or noise, give a short Hindi sound word.
+Known characters: {chars}. Name spellings: {known}.
+
+Lines:
+{json.dumps(lines, ensure_ascii=False)}
+
+Reply ONLY with JSON: {{"lines": [{{"id": 1, "hi": "..."}}, ...]}} with one entry for every id."""
+
+
+_OTHER_INDIC = re.compile(r"[ঀ-෿]")  # Bangla, Gurmukhi, Tamil... (Devanagari nahi)
+
+
+def local_bad(h):
+    """Local model ki galat lipi wali line: dusri Indian lipi, ya Hindi Roman mein (Devanagari kam)."""
+    h = strip_marks(h or "")
+    if not h.strip():
+        return False
+    deva = len(re.findall(r"[ऀ-ॿ]", h))
+    latin = len(re.findall(r"[A-Za-z]", h))
+    return bool(_OTHER_INDIC.search(h)) or (latin > 6 and latin > deva)
+
+
+def local_fix(cfg, en, memory):
+    """Ek line ko akele dobara local se (chhota, ~1-2 s)."""
+    g = [{"text": en}]
+    raw = call_local(cfg, None, None, build_local_prompt([(None, g)], memory))
+    d = _parse_json(raw)
+    for l in d.get("lines", []):
+        h = clean_hi(l.get("hi", ""))
+        if h and not local_bad(h):
+            return h
+    return ""
+
+
+def call_local(cfg, prompt, img_b64, prompt_txt=None):
+    """PC par Ollama (Gemma): sirf text wala prompt, koi limit / token nahi."""
+    c = cfg.get("local", {})
+    url = (c.get("url") or "http://127.0.0.1:11434").rstrip("/")
+    try:
+        r = requests.post(url + "/api/chat", json={
+            "model": c.get("model") or "gemma3:4b", "stream": False, "format": "json", "keep_alive": "15m",
+            "options": {"temperature": 0.4, "num_ctx": 4096},
+            "messages": [{"role": "user", "content": prompt_txt or prompt}]}, timeout=(5, 120))
+    except requests.ConnectionError:
+        raise RuntimeError("local: Ollama nahi chal raha")
+    if r.status_code >= 400:
+        raise RuntimeError(f"local: HTTP {r.status_code} {r.text[:150]}")
+    return r.json()["message"]["content"]
+
+
+def local_status(cfg=None):
+    cfg = cfg or load_config()
+    try:
+        r = requests.get((cfg["local"].get("url") or "http://127.0.0.1:11434").rstrip("/") + "/api/tags", timeout=2)
+        names = [m.get("name", "") for m in r.json().get("models", [])]
+        want = cfg["local"].get("model") or "gemma3:4b"
+        return "ready" if any(n == want or n.startswith(want + ":") for n in names) else f"model {want} not downloaded"
+    except Exception:
+        return "Ollama not running"
+
+
+PROVIDERS = {"gemini": call_gemini, "local": call_local, "groq": call_groq}
 _cooldown = {}   # provider -> time.time() tak band
 _strikes = {}    # lagatar 429 ki ginti
 
@@ -663,6 +745,8 @@ def keys_changed():
 def limit_wait():
     """Saare AI providers limit par hon to kitne second baad khulenge; koi chalu ho to 0."""
     cfg = load_config()
+    if PREFS.get("local"):
+        return 0  # local AI ki koi limit nahi
     now = time.time()
     waits = []
     for p in cfg["providers"]:
@@ -677,8 +761,10 @@ def limit_wait():
 def provider_status():
     cfg = load_config()
     out = {}
-    for p in cfg["providers"]:
-        if p == "nllb":
+    for p in cfg["providers"] + (["local"] if "local" not in cfg["providers"] else []):
+        if p == "local":
+            out[p] = local_status(cfg) if PREFS.get("local") else "off"
+        elif p == "nllb":
             import nllb
             out[p] = "ready" if nllb.AVAILABLE else "not installed"
         elif not cfg.get(p, {}).get("api_key"):
@@ -698,14 +784,19 @@ def translate_pages(pages, lang, page_url="", fast=False, _retry=False, _waited=
     all_groups = [g for _, gs in pages for g in gs]
     total = len(all_groups)
 
-    order = list(cfg["providers"])
+    order = [p for p in cfg["providers"] if p != "local"]
+    if not PREFS.get("gemini", True):
+        order = [p for p in order if p != "gemini"]
+    if PREFS.get("local"):  # Gemini ke baad (ya Gemini band ho to sabse pehle), Groq se pehle
+        i = order.index("gemini") + 1 if "gemini" in order else 0
+        order.insert(i, "local")
     if fast:  # Fast mode: Gemini ke Flash-Lite models pehle (~2 guna tez), bade Flash baad mein
         cfg = dict(cfg, _fast=True)
     for name in order:
         if name not in PROVIDERS:
             continue
         pc = cfg.get(name, {})
-        if not pc.get("api_key") or resting(name, cfg) > 0:
+        if (name != "local" and not pc.get("api_key")) or resting(name, cfg) > 0:
             continue
         with_image = name == "gemini" or bool(pc.get("vision") or pc.get("vision_models"))
         page_list = [(im.size, gs) for im, gs in pages]
@@ -719,7 +810,9 @@ def translate_pages(pages, lang, page_url="", fast=False, _retry=False, _waited=
                 start += len(gs)
         try:
             t = time.time()
-            raw = (PROVIDERS[name](cfg, prompt, imgs, prompt_txt) if name == "groq"
+            if name == "local":
+                prompt_txt = build_local_prompt(page_list, memory)
+            raw = (PROVIDERS[name](cfg, prompt, imgs, prompt_txt) if name in ("groq", "local")
                    else PROVIDERS[name](cfg, prompt, imgs))
             data = _parse_json(raw)
             by_id = {int(l["id"]): l for l in data.get("lines", []) if "id" in l}
@@ -729,6 +822,13 @@ def translate_pages(pages, lang, page_url="", fast=False, _retry=False, _waited=
                 data = _parse_json(PROVIDERS[name](cfg, prompt_txt, None, prompt_txt))
                 by_id = {int(l["id"]): l for l in data.get("lines", []) if "id" in l}
             hindi = [clean_hi(by_id.get(i, {}).get("hi", "")) for i in range(1, total + 1)]
+            if name == "local":  # galat lipi wali line: akele ek baar dobara, phir bhi galat to us lipi ke akshar hatao
+                for j, h in enumerate(hindi):
+                    if local_bad(h) and all_groups[j].get("text"):
+                        try:
+                            hindi[j] = local_fix(cfg, all_groups[j]["text"], memory) or _OTHER_INDIC.sub("", h)
+                        except Exception as e:
+                            print("[local] line fix fail:", e)
             update_memory(key, data.get("characters"), [])
             hindi = [fix_names(h, key) for h in hindi]
             # SFX ka nishaan: render isse bada comic style mein likhta hai
@@ -748,7 +848,7 @@ def translate_pages(pages, lang, page_url="", fast=False, _retry=False, _waited=
             update_memory(key, None, pairs)
             genders = "".join(str(by_id.get(i, {}).get("gender", "u"))[:1] for i in range(1, total + 1))
             print(f"[{name}] {len(pages)} page(s), {total} bubbles, gender={genders}, {time.time() - t:.1f}s")
-            if not _retry:
+            if not _retry and name != "local":  # local: dobara poochhna = do guna der
                 hindi = _reask_missing(pages, all_groups, hindi, lang, page_url, fast)
             out, k = [], 0
             for _, gs in pages:

@@ -67,6 +67,7 @@ isliye Hindi mein gender sahi aata hai: ladki bole to *"मैं थक गई"
 | **Asli text ka rang** | Laal text laal hi rehta hai, gehre bubble ka safed text safed; lines ke rang alag hon to har Hindi line ko apna rang |
 | **Tircha text** | Tircha likha text (game window, chat box) pakda jaata hai aur Hindi usi angle par likhi jaati hai |
 | **Chat ka username wahi** | Chat ya game box mein message ke upar rangeen username ho to wo original jaisa rehta hai, Hindi uske neeche message ke rang mein |
+| **PC par local AI** | Ollama se Gemma 3 4B (optional): koi roz ki limit nahi, internet nahi, ek page ~4-6 s. Gemini busy ho, limit khatam ho ya popup se band ho tab chalta hai |
 | **Panel ke kram mein padhna** | Bubble panel-panel padhe jaate hain (Japanese mein daayen se baayen), taaki AI ko lines kahani ke kram mein milen |
 | **Style ke hisaab se font** | AI har bubble ka style batata hai aur Hindi usi jaise font mein: chillane par mota, dheere bolne par patla, sochne par haath ki likhawat, narration box mein saaf, darawne ya shaahi text ke liye sajawati |
 | **Dhundhla text bhi waisa hi** | Original text dhundhla ho to Hindi bhi utni hi dhundhli |
@@ -462,6 +463,7 @@ Debug ke liye server log mein har page ki language, kaunsa provider chala aur ha
 - [x] Chhote bubbles mein behtar text size aur barabar line todna
 - [x] Panel-panel padhne ka kram, LaMa GPU par
 - [x] Tircha text, har line ka rang aur chat username wahi
+- [x] Local AI (Ollama + Gemma 3 4B) aur popup mein Gemini / Local AI ke switch
 
 ## License
 

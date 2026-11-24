@@ -517,7 +517,7 @@ async def _translate_page(raw, key, lang_choice, page_url, fast, prev_raws=None,
         bcfg = llm.load_config().get("backup", {})
         if ai:
             hindi, provider = ai
-        elif llm.gemini_busy_recent():
+        elif llm.PREFS.get("gemini", True) and llm.gemini_busy_recent():
             # Google ki bheed thodi der ki hoti hai: kharab backup Hindi ki jagah page thodi der baad Gemini se
             raise llm.GeminiBusy("Gemini abhi busy (503), thodi der baad dobara")
         elif backup and lang in backup_api.LANGS and bcfg.get("api_key"):
@@ -561,7 +561,8 @@ async def _translate_page(raw, key, lang_choice, page_url, fast, prev_raws=None,
 
     print(f"[translate] {img.size} lang={lang} via={result.get('provider', '-')} bubbles={result['bubbles']} "
           f"{time.time() - t0:.1f}s (ocr {t_ocr:.1f}s)")
-    if result.get("provider") not in ("nllb", "none", "backup"):  # backup ka result cache nahi: limit khulne par AI se achha  # NLLB backup wala result cache nahi, taaki baad mein AI se dobara ho
+    if result.get("provider") not in ("nllb", "none", "backup") and not (
+            result.get("provider") == "local" and llm.PREFS.get("gemini", True)):  # Gemini chalu: local wala page baad mein Gemini se  # backup ka result cache nahi: limit khulne par AI se achha  # NLLB backup wala result cache nahi, taaki baad mein AI se dobara ho
         _cache[key] = result
         if result.get("image"):
             await asyncio.to_thread(_disk_put, key, result)

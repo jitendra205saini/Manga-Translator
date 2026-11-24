@@ -67,6 +67,7 @@ uses the correct gender: a girl says *"मैं थक गई"*, a boy says *"�
 | **Original text colour** | Red text stays red, white text in a dark bubble stays white; when lines have different colours, each Hindi line gets its own colour |
 | **Tilted text** | Text drawn at an angle (game windows, chat boxes) is detected and the Hindi is drawn at the same angle |
 | **Chat usernames kept** | In a chat or game box with a coloured username above the message, the username stays as in the original and the Hindi goes below it in the message colour |
+| **Local AI on your PC** | Optional Gemma 3 4B through Ollama: no daily limit, no internet, about 4-6 s per page. Used when Gemini is busy, out of limit or switched off in the popup |
 | **Panel reading order** | Bubbles are read panel by panel (right to left for Japanese), so the AI gets the lines in story order |
 | **Font by style** | The AI tags each bubble's look and the Hindi uses a matching font: bold for shouting, light for whispers, handwritten for thoughts, clean for narration boxes, decorative for scary or royal text |
 | **Matches blurry text** | If the original text is blurred, the Hindi gets the same blur |
@@ -463,6 +464,7 @@ gender (`m` / `f` / `u`). The original and translated versions of the last 40 pa
 - [x] Better text size and balanced line breaks in small bubbles
 - [x] Panel-by-panel reading order, LaMa on the GPU
 - [x] Tilted text, colour per line and chat usernames kept
+- [x] Local AI (Ollama + Gemma 3 4B) and Gemini / Local AI switches in the popup
 
 ## License
 

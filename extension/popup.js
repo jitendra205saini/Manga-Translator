@@ -19,7 +19,7 @@ const $ = (id) => document.getElementById(id);
 
   const k = `tab_${tab.id}`;
   let on = !!(await chrome.storage.session.get(k))[k];
-  const { lang, sites, fast, backup } = await chrome.storage.local.get({ lang: "Auto", sites: [], fast: false, backup: false });
+  const { lang, sites, fast, backup, gemini, local } = await chrome.storage.local.get({ lang: "Auto", sites: [], fast: false, backup: false, gemini: true, local: false });
 
   const paint = () => {
     $("toggle").textContent = on ? "ON (this tab)" : "OFF";
@@ -29,6 +29,10 @@ const $ = (id) => document.getElementById(id);
   $("lang").value = lang;
   $("fast").checked = fast;
   $("fast").onchange = () => chrome.storage.local.set({ fast: $("fast").checked });
+  $("gem").checked = gemini;
+  $("loc").checked = local;
+  $("gem").onchange = () => { chrome.storage.local.set({ gemini: $("gem").checked }); serverStatus(); };
+  $("loc").onchange = () => { chrome.storage.local.set({ local: $("loc").checked }); serverStatus(); };
   $("backup").checked = backup;
   $("backup").onchange = () => chrome.storage.local.set({ backup: $("backup").checked });
   $("always").checked = sites.includes(host);
@@ -87,9 +91,9 @@ const $ = (id) => document.getElementById(id);
   const opened = Date.now();
   async function serverStatus() {
   try {
-    const r = await (await fetch("http://127.0.0.1:47391/health")).json();
+    const r = await (await fetch(`http://127.0.0.1:47391/health?gemini=${$("gem").checked ? 1 : 0}&local=${$("loc").checked ? 1 : 0}`)).json();
     const lines = Object.entries(r.providers || {}).filter(([, s]) => s !== "not installed").map(([p, s]) =>
-      `<div>${p}: <span class="${s === "ready" ? "ok" : "bad"}">${s}</span></div>`);
+      `<div>${p === "local" ? "local AI" : p}: <span class="${s === "ready" || s === "off" ? "ok" : "bad"}">${s}</span></div>`);
     const p = r.providers || {};
     const noKey = !(p.gemini === "ready" || p.groq === "ready" || String(p.gemini || "").startsWith("limit") || String(p.groq || "").startsWith("limit"));
     const u = r.usage || {};
