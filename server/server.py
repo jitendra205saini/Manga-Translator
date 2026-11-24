@@ -201,6 +201,9 @@ async def translate(req: TranslateRequest):
         nb = lambda xs: [base64.b64decode(x.split(",", 1)[-1]) for x in xs] or None
         return await translator.translate_page(raw, req.lang, req.page_url, req.fast, req.url, req.fresh,
                                                nb(req.prev_images), nb(req.next_images), req.backup)
+    except llm.GeminiBusy as e:
+        print("[gemini] busy: page 30s baad dobara")
+        return {"error": str(e), "retry_after": 30}
     except Exception as e:
         traceback.print_exc()
         wait = llm.limit_wait()

@@ -517,6 +517,9 @@ async def _translate_page(raw, key, lang_choice, page_url, fast, prev_raws=None,
         bcfg = llm.load_config().get("backup", {})
         if ai:
             hindi, provider = ai
+        elif llm.gemini_busy_recent():
+            # Google ki bheed thodi der ki hoti hai: kharab backup Hindi ki jagah page thodi der baad Gemini se
+            raise llm.GeminiBusy("Gemini abhi busy (503), thodi der baad dobara")
         elif backup and lang in backup_api.LANGS and bcfg.get("api_key"):
             # saari AI limit khatam, popup ka backup switch on: English -> Hindi web API
             provider = "backup"

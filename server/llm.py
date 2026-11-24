@@ -35,6 +35,18 @@ class BadKey(RuntimeError):
     pass
 
 
+class GeminiBusy(RuntimeError):
+    """Gemini ki limit bachi hai par Google abhi bheed (503) mein: thodi der baad dobara, backup nahi."""
+
+
+_gem_busy_at = [0.0]
+
+
+def gemini_busy_recent():
+    """Pichhle 20 s mein Gemini sirf bheed (503 / atka) ki wajah se fail hua, limit se nahi."""
+    return time.time() - _gem_busy_at[0] < 20
+
+
 _OLD_GEMINI_MODELS = [
     ["gemini-3.5-flash-lite", "gemini-flash-lite-latest"],
     ["gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-2.5-flash-lite"],
@@ -397,6 +409,10 @@ def _pace(name, rpm):
         time.sleep(at - now)
 _gemini_dead = set()
 _gemini_busy = {}  # model -> kab tak peeche rakhna (503 / timeout)
+# har key + model ka apna hisaab (har Google project ki limit alag): (key, model) -> kab tak
+_km_day = {}   # aaj ki limit khatam: reset tak is key par ye model mat poochho
+_km_rest = {}  # minute ki limit / bheed: thodi der peeche
+_rr = [0]      # baari-baari: har request agli key se shuru
 _gemini_good = None
 
 
@@ -433,11 +449,19 @@ def call_gemini(cfg, prompt, img_b64):
     keys = gemini_keys(cfg)
     now = time.time()
     order = [k for k in keys if _gkey_rest.get(k, 0) <= now]
-    if not order:  # sab ruki: jo sabse pehle khulegi (galat key nahi)
+    if order:  # baari-baari: load saari keys par bante, ek hi key par minute ki limit na lage
+        _rr[0] = (_rr[0] + 1) % len(order)
+        order = order[_rr[0]:] + order[:_rr[0]]
+    else:  # sab ruki: jo sabse pehle khulegi (galat key nahi)
         order = sorted((k for k in keys if _gkey_state.get(k) != "bad"), key=lambda k: _gkey_rest.get(k, 0))[:1]
+    deadline = time.time() + GEMINI_BUDGET  # saari keys milakar
+    other = None
     for i, key in enumerate(order):
         try:
-            text = _gemini_one(cfg, key, len(keys), prompt, img_b64)
+            if deadline - time.time() < 8:
+                other = other or RuntimeError(f"gemini: {GEMINI_BUDGET}s mein jawab nahi")
+                break
+            text = _gemini_one(cfg, key, len(keys), prompt, img_b64, deadline)
             _gkey_state.pop(key, None)
             usage_bump("gk_" + key_id(key))
             return text
@@ -452,6 +476,12 @@ def call_gemini(cfg, prompt, img_b64):
         except BadKey as e:
             _gkey_rest[key], _gkey_state[key] = time.time() + 3600, "bad"
             print(f"[gemini] key {keys.index(key) + 1}: {e}")
+        except RuntimeError as e:  # is key par models busy / atke: agli key try karo (har project alag)
+            other = e
+            print(f"[gemini] key {keys.index(key) + 1}: {e}" + (", agli key" if i + 1 < len(order) else ""))
+    if other is not None:
+        _gem_busy_at[0] = time.time()
+        raise other
     raise RateLimited("gemini: sab keys ki limit khatam")
 
 
@@ -472,7 +502,7 @@ def test_key(key):
     return "invalid", f"HTTP {r.status_code}"
 
 
-def _gemini_one(cfg, key, nkeys, prompt, img_b64):
+def _gemini_one(cfg, key, nkeys, prompt, img_b64, deadline=None):
     c = cfg["gemini"]
     parts = [{"text": prompt}]
     for b in (img_b64 if isinstance(img_b64, list) else [img_b64] if img_b64 else []):
@@ -485,14 +515,20 @@ def _gemini_one(cfg, key, nkeys, prompt, img_b64):
         models = sorted(models, key=lambda m: (0 if "lite" in m else 1, m != _gemini_good_fast[0]))
     elif _gemini_good in models:
         models = [_gemini_good] + [m for m in models if m != _gemini_good]
-    # abhi bheed (503) / atka hua model peeche: pehle wo jo chal rahe hain
     now = time.time()
-    models = sorted(models, key=lambda m: _gemini_busy.get(m, 0) > now)
+    # is key par aaj khatam models chhodo; sab khatam = key ki aaj ki limit khatam
+    models = [m for m in models if _km_day.get((key, m), 0) <= now]
+    if not models:
+        e = RateLimited("gemini: is key ke sab models ki aaj ki limit khatam")
+        e.daily = True
+        raise e
+    # abhi bheed (503) / minute limit wale peeche: pehle wo jo chal rahe hain
+    models = sorted(models, key=lambda m: max(_km_rest.get((key, m), 0), _gemini_busy.get(m, 0)) > now)
     last = None
     tried = []
     daily_hit = limited = 0  # kitne models par 429, unme se kitne din bhar wale
     # Gemini dheema ho to poora page na atke: kul 40s, phir Groq (extension 90s mein haar maanta hai)
-    deadline = time.time() + GEMINI_BUDGET
+    deadline = deadline or time.time() + GEMINI_BUDGET
     for model in models:
         for _ in range(2):
             left = deadline - time.time()
@@ -510,11 +546,11 @@ def _gemini_one(cfg, key, nkeys, prompt, img_b64):
             except requests.Timeout:
                 r = None  # ye model atka: seedha agla model (poori request fail nahi)
                 last = f"{model}: timeout"
-                _gemini_busy[model] = time.time() + 120
+                _km_rest[(key, model)] = time.time() + 120
                 break
             if r.status_code in (500, 503):  # bheed: dobara mat poochho, 2 min peeche, seedha agla model
                 last = f"{model}: HTTP {r.status_code}"
-                _gemini_busy[model] = time.time() + 120
+                _km_rest[(key, model)] = time.time() + 120
                 r = None
             break
         else:
@@ -532,6 +568,9 @@ def _gemini_one(cfg, key, nkeys, prompt, img_b64):
             limited += 1
             if re.search(r"per ?day|PerDay|daily", r.text, re.I):
                 daily_hit += 1
+                _km_day[(key, model)] = time.time() + reset_in()
+            else:
+                _km_rest[(key, model)] = time.time() + 60
             continue  # har model ki limit alag hoti hai
         if r.status_code in (400, 401, 403) and re.search(r"API_KEY_INVALID|API key not valid|PERMISSION_DENIED|API_KEY", r.text):
             raise BadKey(f"gemini: key galat ya band ({r.status_code})")
@@ -550,7 +589,8 @@ def _gemini_one(cfg, key, nkeys, prompt, img_b64):
     # key tabhi "limit khatam" jab har model ne limit boli; kuch busy (503) / atke the to key theek hai
     if tried and all(t and t.endswith("limit") for t in tried):
         e = RateLimited("gemini: sab models ki limit khatam")
-        e.daily = limited > 0 and daily_hit == limited  # sirf tab, jab har model ki din ki limit khatam
+        # key ki din ki limit tabhi jab uske har model ki aaj khatam
+        e.daily = all(_km_day.get((key, m), 0) > time.time() for m in models)
         raise e
     raise RuntimeError(f"gemini: {last}")
 
