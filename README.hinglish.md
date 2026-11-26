@@ -78,7 +78,7 @@ isliye Hindi mein gender sahi aata hai: ladki bole to *"मैं थक गई"
 | **Dobara translate** | Page par right-click karke **Translate this page again**, cache chhod ke naya anuvaad |
 | **Free limit bachata hai** | Ek AI request mein 6 pages tak, free per-minute limit ke andar pacing, aur disk cache, isliye dobara khole chapter muft |
 | **Kai Gemini keys** | Comma laga ke ek se zyada key daalo. Jis key ki limit khatam ho wo ruk jaati hai aur agli chalti hai |
-| **Backup chain** | Gemini → Groq (vision model, image bhi dekhta hai) → backup translator (switch se) → local NLLB, isliye padhna kam hi rukta hai |
+| **Backup chain** | Gemini → local AI (PC par Gemma) → Groq (vision model, image bhi dekhta hai) → backup translator (switch se) → local NLLB, isliye padhna kam hi rukta hai |
 | **Backup translator** | Popup switch: saari AI limit khatam ho to English pages IndicTrans2 web API se. Cache nahi hota, isliye baad mein AI se dobara achha banta hai |
 | **Limit ka saaf message** | Saari free AI limit khatam ho to page par dikhta hai ki kab dobara shuru hoga, aur apne aap shuru hota hai |
 | **Kaam ka popup** | Progress, aaj ka use, Google ki daily limit kab reset hogi, extension aur server ka version, aur server chalu hote waqt "Server starting…" |
@@ -117,6 +117,7 @@ flowchart LR
         DISK[("config.json · memory.json<br/>usage.json · cache/ · models/<br/>kabhi upload nahi")]
         TRAY --> SV
         SV <--> DISK
+        OLL["Ollama, local AI<br/>Gemma 3 4B · koi limit nahi"]
     end
     subgraph NET["Internet"]
         SITE["Manga website"]
@@ -129,6 +130,7 @@ flowchart LR
     BG -->|"POST /translate"| S1
     POP -->|"GET /health"| SV
     S5 -->|"page image + texts"| GEM
+    S5 -.->|"Gemini busy, limit ya band"| OLL
     S5 -.->|"backup"| GRQ
     S5 -.->|"switch on, limit khatam"| BAK
     TRAY -.-> GH
@@ -198,9 +200,11 @@ flowchart TD
     P --> BQ["Batcher: 0.6 s ruke<br/>ek series ke 6 pages tak<br/>max 45 bubbles = 1 request"]
     BQ --> PC["Free limit ke andar pacing<br/>har Gemini key 14 / min · Groq 25 / min"]
     PC --> FM{"Fast mode?"}
-    FM -->|"nahi"| GM["Gemini<br/>4 keys × 5 models<br/>agla diagram dekho"]
+    FM -->|"nahi"| GM["Gemini<br/>6 keys × 5 models<br/>agla diagram dekho"]
     FM -->|"haan: Flash-Lite models pehle"| GM
-    GM -->|"saari keys ruki"| GQ["Groq vision model"]
+    GM -->|"busy, saari keys ruki<br/>ya switch band"| LC["PC par local AI<br/>Ollama · Gemma 3 4B<br/>chhota prompt · ~4-6 s"]
+    LC -->|"band ya chalu nahi"| GQ["Groq vision model"]
+    LC --> CK
     GM --> CK{"Jawab theek?<br/>har line · Urdu lipi nahi<br/>English nahi bachi"}
     GQ --> CK
     CK -->|"nahi"| RA["Sirf galat lines dobara poochho<br/>aakhri upaay: Urdu → Devanagari"]
@@ -224,8 +228,8 @@ Google ki free limit **project aur model** par lagti hai, key par nahi. Isliye a
 ```mermaid
 flowchart TD
     S["Request taiyaar"] --> A{"Koi key taiyaar?<br/>aaram par nahi"}
-    A -->|"nahi"| GQ["Groq<br/>jab tak pehli key na khule"]
-    A -->|"haan"| K["Pehli taiyaar key lo<br/>Key 1 → Key 2 → Key 3 → Key 4"]
+    A -->|"nahi"| GQ["Local AI, phir Groq<br/>jab tak pehli key na khule"]
+    A -->|"haan"| K["Baari se: agli taiyaar key pehle<br/>Key 1 → Key 2 → … → Key 6"]
     K --> MD["Uske models kram se try karo<br/>jo pichhli baar chala wo pehle"]
     MD --> L["1 gemini-3.5-flash-lite<br/>2 gemini-flash-lite-latest<br/>3 gemini-3.1-flash-lite<br/>4 gemini-3.5-flash<br/>5 gemini-flash-latest"]
     L --> R{"Google ka jawab"}

@@ -78,7 +78,7 @@ uses the correct gender: a girl says *"मैं थक गई"*, a boy says *"�
 | **Translate again** | Right-click a page and choose **Translate this page again** to skip the cache |
 | **Saves free quota** | Up to 6 pages in one AI request, requests paced under the free per-minute limits, and a disk cache so re-opened chapters cost nothing |
 | **Several Gemini keys** | Add more than one key, separated by commas; a key that hits its limit rests and the next one is used |
-| **Fallback chain** | Gemini → Groq (vision model, also sees the image) → optional backup translator → local NLLB, so reading rarely stops |
+| **Fallback chain** | Gemini → local AI (Gemma on your PC) → Groq (vision model, also sees the image) → optional backup translator → local NLLB, so reading rarely stops |
 | **Backup translator** | Popup switch: when every AI limit is used up, English pages are translated by an IndicTrans2 web API. Not cached, so the AI redoes them later |
 | **Clear limit messages** | When every free AI limit is used up, each page shows when it will resume and continues on its own |
 | **Helpful popup** | Progress, today's usage, when Google resets the daily limit, extension and server versions, and "Server starting…" while the server boots |
@@ -117,6 +117,7 @@ flowchart LR
         DISK[("config.json · memory.json<br/>usage.json · cache/ · models/<br/>never uploaded")]
         TRAY --> SV
         SV <--> DISK
+        OLL["Ollama, local AI<br/>Gemma 3 4B · no limit"]
     end
     subgraph NET["Internet"]
         SITE["Manga website"]
@@ -129,6 +130,7 @@ flowchart LR
     BG -->|"POST /translate"| S1
     POP -->|"GET /health"| SV
     S5 -->|"page image + texts"| GEM
+    S5 -.->|"Gemini busy, limit or off"| OLL
     S5 -.->|"fallback"| GRQ
     S5 -.->|"switch on, limits used"| BAK
     TRAY -.-> GH
@@ -198,9 +200,11 @@ flowchart TD
     P --> BQ["Batcher: waits 0.6 s<br/>up to 6 pages of one series<br/>max 45 bubbles = 1 request"]
     BQ --> PC["Pacing under free limits<br/>14 / min per Gemini key · 25 / min Groq"]
     PC --> FM{"Fast mode?"}
-    FM -->|"no"| GM["Gemini<br/>4 keys × 5 models<br/>see the next diagram"]
+    FM -->|"no"| GM["Gemini<br/>6 keys × 5 models<br/>see the next diagram"]
     FM -->|"yes: Flash-Lite models first"| GM
-    GM -->|"every key resting"| GQ["Groq vision model"]
+    GM -->|"busy, every key resting<br/>or switched off"| LC["Local AI on this PC<br/>Ollama · Gemma 3 4B<br/>short prompt · ~4-6 s"]
+    LC -->|"off or not running"| GQ["Groq vision model"]
+    LC --> CK
     GM --> CK{"Answer usable?<br/>every line · no Urdu script<br/>no English left"}
     GQ --> CK
     CK -->|"no"| RA["Ask again only for the bad lines<br/>last resort: Urdu → Devanagari"]
@@ -224,8 +228,8 @@ Google's free limit is per **project and model**, not per key. So keys from diff
 ```mermaid
 flowchart TD
     S["Request ready"] --> A{"Any key ready?<br/>not resting"}
-    A -->|"no"| GQ["Groq<br/>until the first key reopens"]
-    A -->|"yes"| K["Take the first ready key<br/>Key 1 → Key 2 → Key 3 → Key 4"]
+    A -->|"no"| GQ["Local AI, then Groq<br/>until the first key reopens"]
+    A -->|"yes"| K["Round robin: next ready key goes first<br/>Key 1 → Key 2 → … → Key 6"]
     K --> MD["Try its models in order<br/>last model that worked goes first"]
     MD --> L["1 gemini-3.5-flash-lite<br/>2 gemini-flash-lite-latest<br/>3 gemini-3.1-flash-lite<br/>4 gemini-3.5-flash<br/>5 gemini-flash-latest"]
     L --> R{"Google's answer"}
